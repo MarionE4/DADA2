@@ -147,6 +147,13 @@ Biostrings::readDNAStringSet(
 )
 ```
 
+Copie du dossier bash (comme R avant) dans le dossier DADA2
+```{bash}
+pwd
+cp -R /home/rstudio/DADA2/course-material-main/bash .
+```
+
+
 On enlève les séquences des amorces des reads
 ```{r}
 (primer_log <- primer_trim(
