@@ -155,7 +155,7 @@ cp -R /home/rstudio/DADA2/course-material-main/bash .
 
 
 On enlève les séquences des amorces des reads
-```{r}
+```{r, echo=TRUE}
 (primer_log <- primer_trim(
   forward_files = fnFs,
   reverse_files = fnRs,
@@ -166,7 +166,7 @@ On enlève les séquences des amorces des reads
 ))
 ```
 
-```{r}
+```{r, echo=TRUE}
 nopFw <- sort(list.files(path_to_trimmed_reads, pattern = "R1", full.names = TRUE))
 nopRv <- sort(list.files(path_to_trimmed_reads, pattern = "R2", full.names = TRUE))
 ```
@@ -175,7 +175,7 @@ nopRv <- sort(list.files(path_to_trimmed_reads, pattern = "R2", full.names = TRU
 5.
 
 Création d'un dossier et des listes de chemins d'accès pour les reads qui seront filtrés.
-```{r}
+```{r, echo=TRUE}
 path_to_filtered_reads <- here::here("outputs", "dada2","filtered")
 if (!dir.exists(path_to_filtered_reads)) dir.create(path_to_filtered_reads, recursive = TRUE)
 
@@ -184,13 +184,13 @@ filtRs <- file.path(path_to_filtered_reads, basename(fnRs))
 ```
 
 Pour faire le lien entre les fichiers et les noms d'échantillons, nommer simplement le vecteur de noms de fichiers en utilisant les noms d'échantillons 
-```{r}
+```{r, echo=TRUE}
 names(filtFs) <- sample_names
 names(filtRs) <- sample_names
 ```
 
 La fonction filterAndTrim permet de filtrer et couper plusieurs fichiers fastq en fonctions de plusieurs critères définis par l'utilisateur. Puis génère un ou plusieurs fichiers fastq contenant les reads découpés et filtrés.
-```{r}
+```{r, echo=TRUE}
 (out <- dada2::filterAndTrim(
   fwd = nopFw,
   filt = filtFs,
@@ -206,10 +206,42 @@ La fonction filterAndTrim permet de filtrer et couper plusieurs fichiers fastq e
 
 6.1
 Enlever les erreurs de séquençage : regarde la séquence majoritaire et corrige
-
+Création d'un modèle d'erreur.
+```{r, echo=TRUE}
+errF <- dada2::learnErrors(filtFs,
+                           randomize = TRUE,
+                           multithread = TRUE)
+```
+```{r, echo=TRUE}
+errR <- dada2::learnErrors(filtRs,
+                           randomize = TRUE,
+                           multithread = TRUE)
+```
+Visualisation des modèles d'erreur
+```{r, echo=TRUE}
+dada2::plotErrors(errF, nominalQ = TRUE)
+```
+```{r, echo=TRUE}
+dada2::plotErrors(errR, nominalQ = TRUE)
+```
 
 6.2
 Ne garder qu'un seul exemplaire des séquences en multiples exemplaires et mettre dans un fichier combien de fois on a trouvé cette séquence.
+```{r}
+derepFs <- dada2::derepFastq(filtFs, verbose = TRUE)
+```
+```{r}
+derepRs <- dada2::derepFastq(filtRs, verbose = TRUE)
+```
+
+
+Parer à enlever les erreurs de séquençage
+```{r}
+dadaFs <- dada2::dada(derepFs, err = errF, multithread = TRUE)
+```
+```{r}
+dadaRs <- dada2::dada(derepRs, err = errR, multithread = TRUE)
+```
 
 
 7. 
