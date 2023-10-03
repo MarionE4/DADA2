@@ -166,6 +166,74 @@ On enlève les séquences des amorces des reads
 ))
 ```
 
+```{r}
+nopFw <- sort(list.files(path_to_trimmed_reads, pattern = "R1", full.names = TRUE))
+nopRv <- sort(list.files(path_to_trimmed_reads, pattern = "R2", full.names = TRUE))
+```
+
+
+5.
+
+Création d'un dossier et des listes de chemins d'accès pour les reads qui seront filtrés.
+```{r}
+path_to_filtered_reads <- here::here("outputs", "dada2","filtered")
+if (!dir.exists(path_to_filtered_reads)) dir.create(path_to_filtered_reads, recursive = TRUE)
+
+filtFs <- file.path(path_to_filtered_reads, basename(fnFs))
+filtRs <- file.path(path_to_filtered_reads, basename(fnRs))
+```
+
+Pour faire le lien entre les fichiers et les noms d'échantillons, nommer simplement le vecteur de noms de fichiers en utilisant les noms d'échantillons 
+```{r}
+names(filtFs) <- sample_names
+names(filtRs) <- sample_names
+```
+
+La fonction filterAndTrim permet de filtrer et couper plusieurs fichiers fastq en fonctions de plusieurs critères définis par l'utilisateur. Puis génère un ou plusieurs fichiers fastq contenant les reads découpés et filtrés.
+```{r}
+(out <- dada2::filterAndTrim(
+  fwd = nopFw,
+  filt = filtFs,
+  rev = nopRv,
+  filt.rev = filtRs,
+  minLen = 150,
+  matchIDs = TRUE,
+  maxN = 0,
+  maxEE = c(3, 3),
+  truncQ = 2
+))
+```
+
+6.1
+Enlever les erreurs de séquençage : regarde la séquence majoritaire et corrige
+
+
+6.2
+Ne garder qu'un seul exemplaire des séquences en multiples exemplaires et mettre dans un fichier combien de fois on a trouvé cette séquence.
+
+
+7. 
+Alignement des forward et des reverse = création de contigue.
+Plu de R1 et R2 -> contigue
+
+
+8. 
+matrice d'observation
+
+9.
+chimère former pdt PCR :
+lors réplication ADNpol peut se détacher et arrêter polymérisation -> fin PCR 1 brin mère et un petit brin fille. Ce petit brin fille peut venir s'amorcer/fixer au brin mère d'une autre bactérie et l'ADNpol va reprendre élongation. -> Création de chimère : brin mixte bactérie 1 et 2.
+
+
+10. 
+assignation taxonomique
+calcul par pourcentage de chance en partant du haut de l'arbre et descend peut à peut. sarrête juste avant quand le pourcentage est inférieur à celui défini.
+Assignation à une espèce -> ne dépend que de la base de données.
+
+11.
+téléchargement de l'environnement R sur notre ordinateur.
+
+
 
 
 
