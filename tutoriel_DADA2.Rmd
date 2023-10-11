@@ -154,7 +154,7 @@ cp -R /home/rstudio/DADA2/course-material-main/bash .
 ```
 
 
-On enlève les séquences des amorces des reads
+On enlève les séquences des amorces des reads.
 ```{r, echo=TRUE}
 (primer_log <- primer_trim(
   forward_files = fnFs,
@@ -171,8 +171,6 @@ nopFw <- sort(list.files(path_to_trimmed_reads, pattern = "R1", full.names = TRU
 nopRv <- sort(list.files(path_to_trimmed_reads, pattern = "R2", full.names = TRUE))
 ```
 
-
-5.
 
 Création d'un dossier et des listes de chemins d'accès pour les reads qui seront filtrés.
 ```{r, echo=TRUE}
@@ -243,24 +241,56 @@ dadaFs <- dada2::dada(derepFs, err = errF, multithread = TRUE)
 dadaRs <- dada2::dada(derepRs, err = errR, multithread = TRUE)
 ```
 
+Une fois que les erreurs de séquençage enlevés, faire l'alignement des forward et des reverse, il y a création de contigues. Il n'y a plus de R1 et R2.
+```{r}
+mergers <- dada2::mergePairs(
+  dadaF = dadaFs,
+  derepF = derepFs,
+  dadaR = dadaRs,
+  derepR = derepRs,
+  maxMismatch = 0,
+  verbose = TRUE
+)
+```
 
-7. 
-Alignement des forward et des reverse = création de contigue.
-Plu de R1 et R2 -> contigue
+Construction de la matrice d'observation
+```{r}
+seqtab <- dada2::makeSequenceTable(mergers)
+```
 
 
-8. 
-matrice d'observation
+Enlevement des chimères (artefact)
+Lors de la réplication, l'ADN polymérase peut se détacher et arrêter la polymérisation. A la fin du cycle PCR, il y a 1 brin mère et un petit brin fille pour cette bactérie. Ce petit brin fille peut venir s'amorcer/se fixer au brin mère d'une autre bactérie et l'ADN polymérase va reprendre élongation. Il y aura alors création de chimère : brin mixte d'une bactérie 1 et d'une bactérie 2.
+```{r}
+seqtab_nochim <- dada2::removeBimeraDenovo(seqtab,
+                                           method = "consensus",
+                                           multithread = TRUE,
+                                           verbose = TRUE)
+```
+Assignation taxonomique
+Calcul par pourcentage de chance, en partant du haut de l'arbre et descend peu à peu. Il s'arrête un embranchement quand pour celui d'après le pourcentage est inférieur au pourcentage défini. L'assignation à une espèce ne dépend que de la base de données.
+```{r}
+taxonomy <- dada2::assignTaxonomy(
+  seqs = seqtab_nochim,
+  refFasta = silva_train_set,
+  taxLevels = c("Kingdom", "Phylum", "Class",
+                "Order", "Family", "Genus",
+                "Species"),
+  multithread = TRUE,
+  minBoot = 60
+)
+```
 
-9.
-chimère former pdt PCR :
-lors réplication ADNpol peut se détacher et arrêter polymérisation -> fin PCR 1 brin mère et un petit brin fille. Ce petit brin fille peut venir s'amorcer/fixer au brin mère d'une autre bactérie et l'ADNpol va reprendre élongation. -> Création de chimère : brin mixte bactérie 1 et 2.
+```{r}
+taxonomy <- dada2::addSpecies(
+  taxonomy,
+  silva_species_assignment,
+  allowMultiple = FALSE
+)
+```
 
 
-10. 
-assignation taxonomique
-calcul par pourcentage de chance en partant du haut de l'arbre et descend peut à peut. sarrête juste avant quand le pourcentage est inférieur à celui défini.
-Assignation à une espèce -> ne dépend que de la base de données.
+
 
 11.
 téléchargement de l'environnement R sur notre ordinateur.
