@@ -267,7 +267,7 @@ seqtab_nochim <- dada2::removeBimeraDenovo(seqtab,
                                            multithread = TRUE,
                                            verbose = TRUE)
 ```
-Assignation taxonomique
+#10. Assignation taxonomique
 Calcul par pourcentage de chance, en partant du haut de l'arbre et descend peu à peu. Il s'arrête un embranchement quand pour celui d'après le pourcentage est inférieur au pourcentage défini. L'assignation à une espèce ne dépend que de la base de données.
 ```{r}
 taxonomy <- dada2::assignTaxonomy(
@@ -282,7 +282,7 @@ taxonomy <- dada2::assignTaxonomy(
 ```
 
 
-
+Permet l'assignation taxonomique au rang d'espèce, ce que ne permet pas les lignes de code précédentes.
 ```{r}
 taxonomy <- dada2::addSpecies(
   taxonomy,
@@ -291,11 +291,95 @@ taxonomy <- dada2::addSpecies(
 )
 ```
 
+#11. Export des données
+Cette section correspond au téléchargement de l'environnement R sur notre ordinateur.
 
+Les résultats peuvent être exportés comme un objet R, 1 pour le tableau ASV et un autre pour la taxonomie.
+```{r}
+export_folder <- here::here("outputs", "dada2", "asv_table")
 
+if (!dir.exists(export_folder)) dir.create(export_folder, recursive = TRUE)
 
-11.
-téléchargement de l'environnement R sur notre ordinateur.
+saveRDS(object = seqtab_nochim,
+        file = file.path(export_folder, "seqtab_nochim.rds"))
+
+saveRDS(object = taxonomy,
+        file = file.path(export_folder, "taxonomy.rds"))
+```
+
+Le but des lignes suivantes est de transformer nos résultats en fichier texte.
+Création d'une variable pour collecter les séquences ASV.
+```{r}
+asv_seq <- colnames(seqtab_nochim)
+```
+
+Création d'identifiant (id) unique pour chaque ASV (plus court que la séquence en elle-même).
+```{r}
+ndigits <- nchar(length(asv_seq))
+asv_id <- sprintf(paste0("ASV_%0", ndigits, "d"), seq_along(asv_seq))
+```
+
+Renomer les différentes variables avec les nouveaux id.
+```{r}
+row.names(taxonomy) <- colnames(seqtab_nochim) <- names(asv_seq) <- asv_id
+```
+
+Convertir les ASV ids (nom des lignes)dans une nouvelle colonne nommée "asv".
+```{r}
+taxonomy_export <- df_export(taxonomy, new_rn = "asv")
+
+seqtab_nochim_export <- t(seqtab_nochim)
+seqtab_nochim_export <- df_export(seqtab_nochim_export, new_rn = "asv")
+```
+
+Finalement on peut exporter la taxonomie, le tableau ASV et les séquences (celles là en fichier fasta).
+```{r}
+write.table(taxonomy_export,
+            file = file.path(export_folder, "taxonomy.tsv"),
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE)
+
+write.table(seqtab_nochim_export,
+            file = file.path(export_folder, "asv_table.tsv"),
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE)
+
+cat(paste0(">", names(asv_seq), "\n", asv_seq),
+    sep = "\n",
+    file = file.path(export_folder, "asv.fasta"))
+```
+
+Les statistiques de chaque étapes de prétraitement peuvent également être exportées.
+Il faut d'abord assembler le tableau.
+```{r}
+getN <- function(x) sum(dada2::getUniques(x))
+
+log_table <- data.frame(
+  input = primer_log$in_reads,
+  with_fwd_primer = primer_log$`w/adapters`,
+  with_rev_primer = primer_log$`w/adapters2` ,
+  with_both_primers = out[, 1],
+  filtered = out[, 2],
+  denoisedF = sapply(dadaFs, getN),
+  denoisedR = sapply(dadaRs, getN),
+  merged = sapply(mergers, getN),
+  nonchim = rowSums(seqtab_nochim),
+  perc_retained = rowSums(seqtab_nochim) / out[, 1] * 100
+)
+
+rownames(log_table) <- sample_names
+```
+Puis l'exporter.
+```{r}
+df_export(log_table, new_rn = "sample") |>
+  write.table(file = file.path(export_folder, "log_table.tsv"),
+              quote = FALSE,
+              sep = "\t",
+              row.names = FALSE)
+```
+
 
 
 
