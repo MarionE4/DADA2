@@ -9,7 +9,7 @@ unzip main.zip
 ```
 
 (re)Défini la racine de notre projet sur notre ordinateur.
-```{r, eval=FALSE}
+```{r}
 refdb_folder <- here::here("data", "refdb")
 refdb_folder
 ```
@@ -31,7 +31,7 @@ options(timeout = 1200)
 ```
 
 Sauver le chemin de refdb dans l'espace de travail DANS un objet.
-```{r, eval=FALSE}
+```{r}
 silva_train_set <- file.path(refdb_folder, 
                              "silva_nr99_v138.1_train_set.fa.gz")
 silva_species_assignment <- file.path(refdb_folder, 
@@ -148,7 +148,7 @@ Biostrings::readDNAStringSet(
 ```
 
 Copie du dossier bash (comme R avant) dans le dossier DADA2
-```{bash}
+```{bash, eval=FALSE}
 pwd
 cp -R /home/rstudio/DADA2/course-material-main/bash .
 ```
@@ -353,7 +353,7 @@ cat(paste0(">", names(asv_seq), "\n", asv_seq),
 
 Les statistiques de chaque étapes de prétraitement peuvent également être exportées.
 Il faut d'abord assembler le tableau.
-```{r}
+```{r, eval=FALSE}
 getN <- function(x) sum(dada2::getUniques(x))
 
 log_table <- data.frame(
@@ -372,7 +372,7 @@ log_table <- data.frame(
 rownames(log_table) <- sample_names
 ```
 Puis l'exporter.
-```{r}
+```{r, eval=FALSE}
 df_export(log_table, new_rn = "sample") |>
   write.table(file = file.path(export_folder, "log_table.tsv"),
               quote = FALSE,
