@@ -1,6 +1,8 @@
 R Notebook
 ================
 
+## 1.Préparation du répertoire de travail
+
 ``` bash
 wget https://github.com/ANF-MetaBioDiv/course-material/archive/refs/heads/main.zip
 unzip main.zip
@@ -15,26 +17,28 @@ refdb_folder
 
     ## [1] "/home/rstudio/DADA2/data/refdb"
 
-Création du vrai dossier refdb_folder (si rfdb_folder n’existe pas créer
-le, et possibilité créer sous dossier).
+Création du vrai dossier refdb_folder (si rfdb_folder n’existe pas le
+créer, possibilité de créer des sous dossier également).
 
 ``` r
 if (!dir.exists(refdb_folder)) dir.create(refdb_folder,recursive = TRUE)
 ```
 
+Copie du dossier “raw” dans data.
+
 ``` bash
 cp -R course-material-main/data/raw ./data
 ```
 
-Lors téléchargement de données R s’arrête au bout de 60 secondes,
-changement de ce temps à 20 min.
+Lors téléchargement de données, R s’arrête au bout de 60 secondes.
+Changement de ce temps à 20 min.
 
 ``` r
 getOption("timeout")
 options(timeout = 1200)
 ```
 
-Sauver le chemin de refdb dans l’espace de travail DANS un objet.
+Sauvegarder le chemin de refdb dans l’espace de travail DANS un objet.
 
 ``` r
 silva_train_set <- file.path(refdb_folder, 
@@ -63,6 +67,8 @@ if (!file.exists(silva_species_assignment)) {
 }
 ```
 
+Téléchargement des outils.
+
 ``` r
 devtools::load_all(path = "/home/rstudio/DADA2/course-material-main/R/")
 ```
@@ -75,6 +81,8 @@ dans un objet.
 ``` r
 path_to_fastqs <- here::here("data", "raw")
 ```
+
+## 2.Fichiers d’entrées
 
 Faire une liste avec les fichiers forward.
 
@@ -107,9 +115,10 @@ sample_names <- basename(fnFs) |>
   head()
 ```
 
-1.  Création d’un fichier où stocker les données de sortie du
-    qualityprofile
-2.  Vérification de la qualité des profils
+## 3.Vérification de la qualité des séquences
+
+Création d’un fichier où stocker les données de sortie du
+qualityprofile. Vérification de la qualité des profils.
 
 ``` r
 quality_folder <- here::here("outputs",
@@ -125,8 +134,10 @@ qualityprofile(fnFs,
                file.path(quality_folder, "quality_plots.pdf"))
 ```
 
+## 4.Enlèvement des séquences des amorces
+
 Création d’un dossier dans lequel sera enregistré les reads une fois les
-nucléotides avec une qualité médiocre coupée.
+séquences des amorces retirées.
 
 ``` r
 path_to_trimmed_reads <- here::here(
@@ -147,7 +158,7 @@ primer_fwd  <- "CCTACGGGNBGCASCAG"
 primer_rev  <- "GACTACNVGGGTATCTAAT"
 ```
 
-Trouver les amorces des forward dans les reads forward.
+Trouver la séquence de l’amorce forward dans les reads forward.
 
 ``` r
 Biostrings::readDNAStringSet(
@@ -170,7 +181,7 @@ Biostrings::readDNAStringSet(
     ##  [9]   292 CCTACGGGTTGCAGCAGTGGGGA...ATTAAAACTTTTCAGCTAGAGT M01522:260:000000...
     ## [10]   293 CCTACGGGAGGCAGCAGTGGGGA...CCCGGGCTCAACCTGGGAACGG M01522:260:000000...
 
-Trouver les amorces reverse dans les reads reverse.
+Trouver la séquence de l’amorce reverse dans les reads reverse.
 
 ``` r
 Biostrings::readDNAStringSet(
@@ -193,7 +204,7 @@ Biostrings::readDNAStringSet(
     ##  [9]   301 GGTATCTAATCCTCTTCGCTACC...CACGAAGTTAGCCGGACCTTCT M01522:260:000000...
     ## [10]   301 GACTACGGGGGTATCTAATCCTG...GGCTGCCGGCACGGGGTTAGCC M01522:260:000000...
 
-Copie du dossier bash (comme R avant) dans le dossier DADA2
+Copie du dossier bash (comme R avant) dans le dossier DADA2.
 
 ``` bash
 pwd
@@ -257,6 +268,8 @@ nopFw <- sort(list.files(path_to_trimmed_reads, pattern = "R1", full.names = TRU
 nopRv <- sort(list.files(path_to_trimmed_reads, pattern = "R2", full.names = TRUE))
 ```
 
+## 5.Découpage et filtrage de qualité
+
 Création d’un dossier et des listes de chemins d’accès pour les reads
 qui seront filtrés.
 
@@ -270,7 +283,7 @@ filtRs <- file.path(path_to_filtered_reads, basename(fnRs))
 
 Pour faire le lien entre les fichiers et les noms d’échantillons, nommer
 simplement le vecteur de noms de fichiers en utilisant les noms
-d’échantillons
+d’échantillons.
 
 ``` r
 names(filtFs) <- sample_names
@@ -316,8 +329,12 @@ filtrés.
     ## S9B_R1.fastq.gz      1834      1195
     ## S9S_R1.fastq.gz      1835      1249
 
-6.1 Enlever les erreurs de séquençage : regarde la séquence majoritaire
-et corrige Création d’un modèle d’erreur.
+## 6.Débruitage
+
+Enlever les erreurs de séquençage : regarder la séquence majoritaire et
+corriger.
+
+Création d’un modèle d’erreur.
 
 ``` r
 errF <- dada2::learnErrors(filtFs,
@@ -335,7 +352,7 @@ errR <- dada2::learnErrors(filtRs,
 
     ## 6337638 total bases in 22350 reads from 18 samples will be used for learning the error rates.
 
-Visualisation des modèles d’erreur
+Visualisation des modèles d’erreur.
 
 ``` r
 dada2::plotErrors(errF, nominalQ = TRUE)
@@ -354,9 +371,10 @@ dada2::plotErrors(errR, nominalQ = TRUE)
 
 ![](tutoriel_DADA2_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
-6.2 Ne garder qu’un seul exemplaire des séquences en multiples
-exemplaires et mettre dans un fichier combien de fois on a trouvé cette
-séquence.
+Déreplication :
+
+Ne garder qu’un seul exemplaire des séquences en multiples exemplaires
+et mettre dans un fichier combien de fois on a trouvé cette séquence.
 
 ``` r
 derepFs <- dada2::derepFastq(filtFs, verbose = TRUE)
@@ -510,7 +528,7 @@ derepRs <- dada2::derepFastq(filtRs, verbose = TRUE)
 
     ## Encountered 911 unique sequences from 1249 total sequences read.
 
-Parer à enlever les erreurs de séquençage
+Enlèvement des erreurs de séquençage.
 
 ``` r
 dadaFs <- dada2::dada(derepFs, err = errF, multithread = TRUE)
@@ -557,6 +575,8 @@ dadaRs <- dada2::dada(derepRs, err = errR, multithread = TRUE)
     ## Sample 16 - 1267 reads in 967 unique sequences.
     ## Sample 17 - 1195 reads in 892 unique sequences.
     ## Sample 18 - 1249 reads in 911 unique sequences.
+
+## 7.Fusions des reads appariés
 
 Une fois que les erreurs de séquençage enlevés, faire l’alignement des
 forward et des reverse, il y a création de contigues. Il n’y a plus de
@@ -609,19 +629,20 @@ mergers <- dada2::mergePairs(
 
     ## 873 paired-reads (in 29 unique pairings) successfully merged out of 1044 (in 57 pairings) input.
 
-Construction de la matrice d’observation
+## 8.Construction de la matrice d’observation
 
 ``` r
 seqtab <- dada2::makeSequenceTable(mergers)
 ```
 
-Enlevement des chimères (artefact) Lors de la réplication, l’ADN
-polymérase peut se détacher et arrêter la polymérisation. A la fin du
-cycle PCR, il y a 1 brin mère et un petit brin fille pour cette
-bactérie. Ce petit brin fille peut venir s’amorcer/se fixer au brin mère
-d’une autre bactérie et l’ADN polymérase va reprendre élongation. Il y
-aura alors création de chimère : brin mixte d’une bactérie 1 et d’une
-bactérie 2.
+## 9.Enlevement des chimères (artefact)
+
+Lors de la réplication, l’ADN polymérase peut se détacher et arrêter la
+polymérisation. A la fin du cycle PCR, il y a 1 brin mère et un petit
+brin fille pour cette bactérie. Ce petit brin fille peut venir
+s’amorcer/se fixer au brin mère d’une autre bactérie et l’ADN polymérase
+va reprendre élongation. Il y aura alors création de chimère : brin
+mixte d’une bactérie 1 et d’une bactérie 2.
 
 ``` r
 seqtab_nochim <- dada2::removeBimeraDenovo(seqtab,
@@ -632,11 +653,12 @@ seqtab_nochim <- dada2::removeBimeraDenovo(seqtab,
 
     ## Identified 2 bimeras out of 162 input sequences.
 
-\#10. Assignation taxonomique Calcul par pourcentage de chance, en
-partant du haut de l’arbre et descend peu à peu. Il s’arrête un
-embranchement quand pour celui d’après le pourcentage est inférieur au
-pourcentage défini. L’assignation à une espèce ne dépend que de la base
-de données.
+## 10.Assignation taxonomique
+
+Calcul par pourcentage de chance, en partant du haut de l’arbre et
+descend peu à peu. Il s’arrête un embranchement quand pour celui d’après
+le pourcentage est inférieur au pourcentage défini. L’assignation à une
+espèce ne dépend que de la base de données.
 
 ``` r
 taxonomy <- dada2::assignTaxonomy(
@@ -661,8 +683,10 @@ taxonomy <- dada2::addSpecies(
 )
 ```
 
-\#11. Export des données Cette section correspond au téléchargement de
-l’environnement R sur notre ordinateur.
+## 11.Export des données
+
+Cette section correspond au téléchargement de l’environnement R sur
+notre ordinateur.
 
 Les résultats peuvent être exportés comme un objet R, 1 pour le tableau
 ASV et un autre pour la taxonomie.
