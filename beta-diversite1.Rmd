@@ -421,13 +421,13 @@ text(x = spe_upgma$height,
 ```
 De droite à gauche, ce premier graphique montre des sauts claires après chaque fusion entre 2 groupes.
 Utilisation du package NbClust pour déterminer le nombres exacts de clusters dans le jeu de données.
-```{r, eval=FALSE}
+
+```{r}
 install.packages("NbClust", lib = ".")
-library("NbClust", lib.loc = ".")
+#install.packages("NbClust", lib = ".", repos = "https://cloud.r-project.org/")
 ```
 ```{r}
-install.packages("NbClust", lib = ".", repos = "https://cloud.r-project.org/")
-
+library("NbClust", lib.loc = ".")
 ```
 
 ```{r}
