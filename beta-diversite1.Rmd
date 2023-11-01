@@ -1,0 +1,452 @@
+---
+title: "Bétâ-diversité"
+author: "Marion MENEC"
+date: "2023-11-01"
+output: html_document
+---
+# Partie 1
+
+Charger les librairies utiles.
+```{r, eval=FALSE}
+library(phyloseq)
+library(ggplot2)
+library(dplyr)
+devtools::load_all()
+```
+```{r}
+output_beta <- here::here("outputs", "beta_diversity")
+if (!dir.exists(output_beta)) dir.create(output_beta, recursive = TRUE)
+```
+
+Charger les données.
+```{r, eval=FALSE}
+physeq <- readRDS(here::here("course-material-main",
+                             "data",
+                             "asv_table",
+                             "phyloseq_object_alpha_beta_div.rds"))
+```
+
+# Partie 2
+Normalisation des tables de données
+Ici on le fait par raréfaction : nous sous-échantillons les reads de chaque échantillon sans remise à une "profondeur constante"
+```{r}
+rowSums(physeq@otu_table@.Data)
+```
+
+On va faire des tableaux de ces résultats et regarder les rangs d'abondance de nos reads.
+```{r}
+readsumsdf <- data.frame(nreads = sort(taxa_sums(physeq), decreasing = TRUE),
+                        sorted = 1:ntaxa(physeq),
+                        type = "OTUs")
+
+tmp <- data.frame(nreads = sort(sample_sums(physeq), decreasing = TRUE), 
+                  sorted = 1:nsamples(physeq),
+                  type = "Samples")
+
+readsumsdf <- rbind(readsumsdf, tmp)
+
+head(readsumsdf)
+```
+
+```{r}
+ggplot(readsumsdf, aes(x = sorted, y = nreads)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Total number of reads") +
+  scale_y_log10() +
+  facet_wrap(~type, nrow = 1, scales = "free")
+```
+
+On veut s'assurer que l'effort des échantillonnages est le même pour tous les échantillons.
+On défini la graine pour un échantillonnage aléatoire qui permet la reproductibilité.
+```{r}
+set.seed(10000)
+
+min(rowSums(physeq@otu_table@.Data))
+```
+
+Le miminum de reads dans un échantillon est 837
+Faisons l'échantillonnage aléatoire pour 800 reads par échantillon pour appliquer le processus à chaque échantillonnage pour avoir le même nombre partout (mettre tout le monde au même niveau, le plus bas)
+```{r}
+physeq_rar <- rarefy_even_depth(physeq, sample.size = 800)
+rowSums(physeq_rar@otu_table@.Data)
+```
+
+```{r}
+physeq
+```
+
+```{r}
+physeq_rar
+```
+
+Les données du microbiome sont de composition car elles sont contraintes par la somme totale des lectures en raison de la profondeur de séquençage. Les abondances relatives des taxons sont interdépendantes en raison de cette contrainte, ce qui signifie qu'elles ne fournissent pas directement l'abondance réelle d'un taxon, mais plutôt des informations relatives par rapport à d'autres taxons dans le même échantillon. Pour analyser ces données, on utilise des transformations de rapports logarithmiques pour les placer dans un espace euclidien et appliquer des méthodes statistiques préférées. Il existe différents types de transformations de rapports logarithmiques, notamment additives, centrées et isométriques.
+
+Faisons la transformation CLR (centered log-ratio)
+```{r}
+tmp <- zCompositions::cmultRepl(physeq@otu_table,
+                                method = "CZM",
+                                label = 0,
+                                z.warning = 1)
+
+physeq_clr_asv <- apply(tmp, 1, function(x) log(x) - mean(log(x)))
+```
+
+Tous le monde à la même enseigne : on centre et on passe en log.
+```{r}
+physeq_clr <- physeq
+otu_table(physeq_clr) <- otu_table(t(physeq_clr_asv),
+                                   taxa_are_rows = FALSE)
+data.frame(physeq_clr@otu_table@.Data[1:5, 1:10])
+```
+
+# Partie 3
+
+La première étape dans beaucoup de projets de microbiome, c'est de visualiser l'abondance relative des organismes à un rang taxonomique spécifique. La representation en arbre et les plots compilés sont deux façons de le faire
+```{r}
+physeq_phylum <- physeq_rar %>%
+  tax_glom(taxrank = "Family") %>%                     # agglomerate at the Family level
+  transform_sample_counts(function(x) {x/sum(x)} ) %>% # Transform to rel. abundance
+  psmelt() %>%                                         # Melt to long format
+  filter(Abundance > 0.02) %>%                         # Filter out low abundance taxa
+  arrange(Family)                                      # Sort data frame alphabetically by phylum
+
+head(physeq_phylum)
+```
+
+Regarder la composition de la méta-communauté avec un arbre permet de détecter si certains taxa ne devraient pas être présents (contaminants) et d'observer si le taxa dominant correspond bien à l'habitat étudié.
+```{r}
+#pdf(file="treemap.pdf", wi = 7, he = 7)
+
+treemap::treemap(physeq_phylum, index=c("Class", "Family"), vSize="Abundance", type="index",
+        fontsize.labels=c(15,12),                
+        fontcolor.labels=c("white","black"),# Color of labels
+        fontface.labels=c(2,1),                  
+        align.labels=list(
+          c("center", "center"), 
+          c("left", "bottom")), # Where to place labels in the rectangle?
+        overlap.labels=0.5,
+        inflate.labels=F, # If true, labels are bigger when rectangle is bigger.
+        border.col=c("black","white"),#Color of the boders separating the taxonomic levels
+        border.lwds=c(4,2),
+        #palette = "Set3", # Select your color palette from the RColorBrewer presets or make your own.
+        fontsize.title=12
+)
+```
+size labels = donne la taille par niveau d'agrégation : taille du groupe, taille du sous-groupe, sous-sous-groupes...
+fontface.lables = police des étiquettes, 1,2,3,4 pour normal, gras, italique, gras-italique...
+overlap.labels = nombre compris entre 0 et 1 qui détermine la tolérance de chevauchement entre les étiquettes. 0 signifie que les étiquettes des niveaux inférieurs ne sont pas imprimées si les étiquettes des niveaux supérieurs se chevauchent, 1 signifie que les étiquettes sont toujours imprimées. Les valeurs intermédiaires, par exemple la valeur par défaut 0,5, signifie que les étiquettes de niveau inférieur sont imprimées si les autres étiquettes ne se chevauchent pas sur plus de 0,5 fois leur taille de zone.
+
+```{r}
+#dev.off()
+```
+
+Utilisation du package treemapify.
+```{r}
+tmp <- transform_sample_counts(physeq,function(x) {x/sum(x)} ) %>%
+  psmelt() %>%
+  group_by(Family, Class) %>%
+  summarise(abundance = sum(Abundance)) %>%
+  na.omit()
+
+ggplot(tmp,aes(area=abundance,label=Family,fill=Class,subgroup=Class))+
+  treemapify::geom_treemap()+
+  treemapify::geom_treemap_subgroup_border() +
+  treemapify::geom_treemap_subgroup_text(place = "centre",
+                                         grow = T,
+                                         alpha = 0.5,
+                                         colour = "black",
+                                         fontface = "italic",
+                                         min.size = 0) +
+  treemapify::geom_treemap_text(colour = "white",
+                                place = "topleft",
+                                reflow = TRUE)+
+  theme(legend.position="none")
+```
+
+
+```{r}
+ggsave(here::here(output_beta,"treemap_treemapify.pdf"))
+```
+
+Ici on peut observer que la méta-communauté est dominée par des clades typiquement marins comme le groupe marin AEGEAN dans les alphaprotéobactéries ou le clade SAR86 dans les gammaprotéobactéries. Donc tout va bien pour le moment ;)
+
+
+```{r}
+ggplot(physeq_phylum, aes(x = Sample, y = Abundance, fill = Family)) + 
+  geom_bar(stat = "identity") +
+  # facet_wrap(~Treatment, nrow=1, scales = "free_x") +
+  ylab("Relative Abundance (Family > 2%)") +
+  scale_y_continuous(expand = c(0,0)) + #remove the space below the 0 of the y axis in the graph
+  ggtitle("Community composition") +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, size = 10,
+                                   hjust = 0.5, vjust = 0.8),
+        axis.ticks.x = element_blank(),
+        panel.background = element_blank(), 
+        panel.grid.major = element_blank(),  #remove major-grid labels
+        panel.grid.minor = element_blank())  #remove minor-grid labels
+```
+Le blanc ce sont les inconnus, on n'a pas réussi à les attribuer à une famille.
+
+```{r}
+ggsave(here::here(output_beta, "asv_composition.pdf"))
+```
+
+Ici on peut déjà voir une différence de composition au niveau des familles avec un enrichissement dans les pseudoalteromonadaceae dans quelques échantillons et cyanobiaceae.
+Il faut noter que nous sommes limités par notre habilité à discerner plus de 9-12 couleurs.
+
+
+# Partie 4
+
+Au fil des ans, les écologistes ont inventé de nombreuses façons de quantifier la dissimilarité entre des paires d'écosystèmes. Quatre composantes de la bêta-diversité des communautés d'espèces peuvent être évaluées à l'aide de différentes distances ou dissimilarités. Les distances ou dissimilarités de composition ne tiennent pas compte de l'abondance relative des taxons, mais uniquement de leur présence (détection) ou de leur absence, ce qui peut les rendre (trop) sensibles aux taxons rares, aux artefacts de séquençage et aux choix de filtrage de l'abondance. À l'inverse, les distances ou dissimilarités structurelles accordent (peut-être trop) d'importance aux taxons très abondants lors de la détermination des dissimilarités. Les distances ou dissimilarités phylogéniques tiennent compte de la parenté phylogénétique des taxons/séquences de vos échantillons lors du calcul de la dissimilarité, ce qui n'est pas le cas des distances ou dissimilarités taxonomiques.
+
+
+Indice de jaccard binaire : présence / absence
+```{r}
+physeq_rar_jaccard <- phyloseq::distance(physeq_rar,
+                                         method = "jaccard",
+                                         binary = TRUE)
+
+# trick to avoid negative egein values in PCoA
+# it recreates what ade4::dist.binary() does
+physeq_rar_jaccard <- sqrt(physeq_rar_jaccard)
+```
+
+Le package GUniFrac nécessite une arborescence enracinée comme données d'entrée. 
+Pour vérifier si l'arbre est enraciné :
+```{r}
+ape::is.rooted(physeq_rar@phy_tree)
+```
+
+## Calculer les distances.
+
+### Phylogénétique compositionnelle (Unifrac non pondéré)
+UniFrac est un autre indice de bétâ-diversité. Il s'agit de l'intersection entre les échantillons, il pondère l'abondance relative des ASV par leur distance phylogénétique.
+```{r}
+unifracs <- GUniFrac::GUniFrac(physeq_rar@otu_table@.Data, physeq_rar@phy_tree, alpha=c(0, 0.5, 1))$unifracs
+```
+
+L'objet unifracs est une liste qui contient 5 matrices de distance qui correspondent à : weighted UniFrac (d_1), the unweighted UniFrac (d_UW), Variance adjusted UniFrac (d_VAW), GUniFrac with alpha = 0, GUniFrac with alpha = 0.5
+```{r}
+physeq_rar_du <- unifracs[, , "d_UW"]   # Unweighted UniFrac
+```
+
+
+### Taxonomique structurelle (Bray-Curtis)
+
+```{r}
+# physeq_rar_bray <- vegan::vegdist(physeq_rar@otu_table@.Data, method = "bray")
+
+tmp <- transform_sample_counts(physeq,function(x) {x/sum(x)} )
+physeq_rar_bray <- phyloseq::distance(tmp, method = "bray")
+```
+
+
+### Phylogénétique structurelle (Unifrac pondéré)
+
+```{r}
+physeq_rar_dw <- unifracs[, , "d_1"]   # Weighted UniFrac
+```
+
+
+## Visualisation
+
+On peut calculer directement les distances, il y a 44 options de méthodes supportées explicitement dans le package phyloseq.
+A travers chaque méthode de distance, on sauvegardera chaque plot et list et les résultats combinés dans un grahique.
+```{r}
+dist_methods <- unlist(distanceMethodList)
+data.frame(position = seq_along(dist_methods),
+           dist_methods)
+```
+
+```{r}
+#Select the distances of interest
+dist_methods <- dist_methods[c(1, 2, 10, 8)]
+dist_methods
+```
+
+```{r}
+#Loop through each distance method, save each plot to a list, called plist.
+plist <- vector("list")
+
+for(i in dist_methods){
+  # Calculate distance matrix
+  iDist <- phyloseq::distance(physeq_rar, method = i)
+  # Calculate PCoA ordination
+  iMDS <- ordinate(physeq_rar, "MDS", distance = iDist)
+  ## Make plot. Don't carry over previous plot (if error, p will be blank)
+  p <- NULL
+  # Create plot, store as temp variable, p
+  p <- plot_ordination(physeq_rar, iMDS, color= "Geo")
+  # Add title to each plot
+  p <- p + ggtitle(paste("MDS using distance method ", i, sep=""))
+  # Save the graphic to list
+  plist[[i]] = p 
+}
+```
+
+Combiner les résultats : 
+```{r}
+df <- plyr::ldply(plist, function(x) x$data)
+head(df)
+```
+
+Faire des ordinations avec différents indices.
+```{r}
+names(df)[1] <- "distance"
+
+ggplot(df, aes(Axis.1, Axis.2, color = Geo)) +
+  geom_point(size=3, alpha=0.5) +
+  theme_bw() +
+  facet_wrap(~distance, scales="free") +
+  ggtitle("PCoA (MDS) on various distance metrics")
+```
+
+On peut observer qu'il y a une vraie séparation entre les échantillons du nord et du sud, à part les distances Weighted UniFrac qui tendent à donner plus de poids au ASV les plus abondantes qui sont aussi les plus fréquentes.
+
+
+# Partie 5 : Clustering hiérarchique
+
+## Classification ascendante hiérarchique (HAC)
+
+Examiner les clusters d'échantillons sur des mesures de dis(similarités)
+Les données de microbiome sont compositionelles, on va faire une classification ascendante hierarchique (HAC) des échantillons basée sur la distance Aitchison.
+```{r}
+#distance matrix calculation
+physeq_clr_dist <- phyloseq::distance(physeq_clr, method = "euclidean")
+```
+
+Regardons les différence de clusters obtenus avec 4 critères d'aggrégation
+
+```{r}
+#Simple aggregation criterion
+spe_single <- hclust(physeq_clr_dist, method = "single")
+
+#Complete aggregation criterion
+spe_complete <- hclust(physeq_clr_dist, method = "complete")
+
+#Unweighted pair group method with arithmetic mean
+spe_upgma <- hclust(physeq_clr_dist, method = "average")
+
+#Ward criterion
+spe_ward <- hclust(physeq_clr_dist, method = "ward.D")
+
+par(mfrow = c(2, 2))
+plot(spe_single, main = "single")
+plot(spe_complete, main = "complete")
+plot(spe_upgma, main = "UPGMA")
+plot(spe_ward, main = "ward")
+
+#ce n'est pas un test stat, c'est une procédure heuristique
+```
+
+Il ne faut pas oublier que le clustering est une procédure heuristique et non un test statistique. Les choix d'un coefficient d'association et d'une méthode de clustering influencent le résultat. Cela souligne l’importance de choisir une méthode cohérente avec les objectifs de l’analyse.
+
+
+## Corrélation cophénétique
+
+Une matrice cophénétique représente les distances cophénétiques entre toutes les paires d'objets. On peut calculer une corrélation de Pearson, appelée corrélation cophénétique, entre la matrice de dissimilarité originale et la matrice cophénétique. La méthode avec la corrélation cophénétique la plus élevée est considérée comme ayant produit le meilleur modèle de regroupement pour la matrice de distance.
+
+Composons la matrice cophénétique et de corrélation de 4 résultats de clustering présents au-dessus.
+```{r}
+#Cophenetic correlation
+spe_single_coph <- cophenetic(spe_single)
+cor(physeq_clr_dist, spe_single_coph)
+spe_complete_coph <- cophenetic(spe_complete)
+cor(physeq_clr_dist, spe_complete_coph)
+spe_upgma_coph <- cophenetic(spe_upgma)
+cor(physeq_clr_dist, spe_upgma_coph)
+spe_ward_coph <- cophenetic(spe_ward)
+cor(physeq_clr_dist, spe_ward_coph)
+```
+Quel dendrogramme conserve la relation la plus proche avec la matrice de distance d'Aitchinson? Il s'agit du dendogramme de la méthode UPGMA car il a la corrélation la plus élevé.
+
+Pour illustrer la relation entre la matrice de distance et un ensembles de matrices cophénétique obtenues de différentes façons, on peut réaliser un diagramme Shepard-like en traçant les distances originelles par rapport au distances cophénétique.
+```{r}
+plot_coph_cor <- function(cophenetic_distance, hclust_type){
+
+  # first calculate the correlation between
+  # the cophenetic distance and the observed distance
+  cor_res <- round(cor(physeq_clr_dist, cophenetic_distance),3)
+
+  # generate a scatter plot to visualise
+  # the relationship
+  plot(x = physeq_clr_dist,
+     y = cophenetic_distance,
+     xlab = "Aitchison distance",
+     ylab = "Cophenetic distance",
+     xlim = c(10, 35), ylim = c(10, 35),
+     main = c(hclust_type, paste("Cophenetic correlation ", cor_res)))
+  abline(0, 1)
+}
+
+par(mfrow=c(2,2))
+
+plot_coph_cor(cophenetic_distance = spe_complete_coph,
+              hclust_type = "Single linkage")
+
+plot_coph_cor(cophenetic_distance = spe_complete_coph,
+              hclust_type = "Complete linkage")
+
+plot_coph_cor(cophenetic_distance = spe_upgma_coph,
+              hclust_type = "Average linkage")
+
+plot_coph_cor(cophenetic_distance = spe_ward_coph,
+              hclust_type = "Ward linkage")
+```
+
+Il semblerait que la méthode UPGMA donne la représentation la plus représantative des distances originelles. Ce qui correspond à l'hypothèse plus haut.
+
+
+## Recherche des clusters interprétables
+
+Cela signifie qu'il faut décider à quel niveau faut-il couper le dendrogramme. De nombreux indices ont été publiés dans la littérature pour trouver le bon nombre de clusters dans un ensemble de données. Les valeurs du niveau de fusion d'un dendrogramme sont les valeurs de dissimilarité où se produit une fusion entre deux branches d'un dendrogramme. Tracer les valeurs du niveau de fusion peut aider à définir les niveaux de coupe. Traçons les valeurs du niveau de fusion pour le dendrogramme UPGMA.
+```{r}
+#Fusion level plot
+par(mfrow = c(1, 1))
+
+plot(x = spe_upgma$height,
+     y = phyloseq::nsamples(physeq_clr):2,
+     type = "S",
+     main = "Fusion levels - Aitchison - Average",
+     ylab = "k (number of cluster)",
+     xlab = "h (node height)")
+
+text(x = spe_upgma$height,
+     y = phyloseq::nsamples(physeq_clr):2,
+     labels = phyloseq::nsamples(physeq_clr):2,
+     col = "red",
+     cex = 0.8)
+```
+De droite à gauche, ce premier graphique montre des sauts claires après chaque fusion entre 2 groupes.
+Utilisation du package NbClust pour déterminer le nombres exacts de clusters dans le jeu de données.
+```{r, eval=FALSE}
+install.packages("NbClust", lib = ".")
+library("NbClust", lib.loc = ".")
+```
+```{r}
+install.packages("NbClust", lib = ".", repos = "https://cloud.r-project.org/")
+
+```
+
+```{r}
+nclust <- nb_clust_all(data = t(physeq_clr_asv), seed = 1000)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
