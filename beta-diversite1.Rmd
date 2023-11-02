@@ -6,20 +6,26 @@ output: html_document
 ---
 # Partie 1
 
+```{r}
+setwd("~/DADA2/course-material-main")
+```
+
+
 Charger les librairies utiles.
 ```{r, eval=FALSE}
 library(phyloseq)
 library(ggplot2)
 library(dplyr)
-devtools::load_all()
+devtools::load_all(path = "course-material-main/R")
 ```
+
 ```{r}
 output_beta <- here::here("outputs", "beta_diversity")
 if (!dir.exists(output_beta)) dir.create(output_beta, recursive = TRUE)
 ```
 
 Charger les données.
-```{r, eval=FALSE}
+```{r}
 physeq <- readRDS(here::here("course-material-main",
                              "data",
                              "asv_table",
@@ -420,24 +426,62 @@ text(x = spe_upgma$height,
      cex = 0.8)
 ```
 De droite à gauche, ce premier graphique montre des sauts claires après chaque fusion entre 2 groupes.
-Utilisation du package NbClust pour déterminer le nombres exacts de clusters dans le jeu de données.
+Utilisation du package NbClust pour déterminer le nombre exact de clusters dans le jeu de données.
 
-```{r}
+```{r,eval=FALSE}
 install.packages("NbClust", lib = ".")
-#install.packages("NbClust", lib = ".", repos = "https://cloud.r-project.org/")
-```
-```{r}
 library("NbClust", lib.loc = ".")
 ```
+
 
 ```{r}
 nclust <- nb_clust_all(data = t(physeq_clr_asv), seed = 1000)
 ```
 
+NbClust confirme qu'il y a bien 2 clusters. Retour au dendogramme pour le couper au bon endroit et pouvoir comparer les 2 clusters.
+```{r}
+k <- 2 # Number of groups given by the fusion level plot
 
+#Cut the dendrogram
+spe_upgma_clust <- cutree(tree = spe_upgma, k = k)
+table(spe_upgma_clust)
+```
 
+```{r}
+spe_upgma_clust2 <- data.frame(UPGMA_clusters = spe_upgma_clust)
+```
 
+```{r}
+# Plot dendrogram with group labels
+plot(spe_upgma,
+     hang = -1,
+     ylab = "Height",
+     main="Aitchison distance - UPGMA")
 
+rect.hclust(spe_upgma,
+            k = k,
+            border = 2:6,
+            cluster = spe_upgma_clust)
+
+legend("topright",
+       paste("Cluster", 1:k),
+       pch = 22,
+       col = 2:(k + 1),
+       bty = "n")
+```
+
+Il y a plusieurs manières de mesurer la robustesse d'un algorithme de clustering. Les 3 méthodes les plus communes sont celles de l'indice de Dunn, l'indice de Davis-Bouldin et l'indice de Silhoutte.
+L'indice de Dunn est calculé comme le rapport de la plus petite distance inter-cluster à la plus grande distance intra-cluster. Un DI élevé signifie un meilleur regroupement puisque les observations de chaque cluster sont plus rapprochées, tandis que les clusters eux-mêmes sont plus éloignés les uns des autres. 
+```{r}
+cs <- fpc::cluster.stats(d = physeq_clr_dist,
+                         clustering = spe_upgma_clust)
+
+cs$dunn
+```
+DI est élevé. Cela indique que les échantillons ont un bons clustering.
+Maintenant que 2 groupes ont été iddentifié, basé sur la composition de leur communauté microbienne, on va regarder quels clades ou ASVs les composent.
+
+## Combinaison du clustering et de la Heatmap Z-score
 
 
 
