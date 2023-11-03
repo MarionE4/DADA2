@@ -483,8 +483,131 @@ Maintenant que 2 groupes ont été iddentifié, basé sur la composition de leur
 
 ## Combinaison du clustering et de la Heatmap Z-score
 
+La heatmap Z-score est normalisée et réduites. C'est la comparaison d'une valeur observée d'un échantillon à la moyenne de la population. Elle répond donc à la question : à quelle distance de la moyenne de la population se trouve un score pour un échantillon donné. Les scores sont donnés en écart-type (SD) par rapport à la moyenne de la population.
+
+Sélection du top 30 ASV
+```{r}
+#Transform Row/normalized counts in percentage: transform_sample_counts
+pourcentS <- phyloseq::transform_sample_counts(physeq_rar, function(x) x/sum(x) * 100)
+#Selection of top 30 taxa 
+mytop30 <- names(sort(phyloseq::taxa_sums(pourcentS), TRUE)[1:30])
+#Extraction of taxa from the object pourcentS
+selection30 <- phyloseq::prune_taxa(mytop30, pourcentS)
+#See new object with only the top 30 ASV
+selection30
+```
+
+Obtention du tableau des OTU et transformation Z-score
+```{r}
+#Retrieve abundance of ASV (otu_table) as table & put in data.prop variable
+selection30_asv <- phyloseq::otu_table(selection30)
+selection30_sample <- phyloseq::sample_data(selection30)
+
+#Change the rownames
+#See
+rownames(selection30_asv)
+```
+
+```{r}
+# rownames(data.prop)<-c("S11B_South5B","S1B_North1B","S2B_North2B","S2S_North2S","S3B_North3B","S3S_North3S","S4B_North4B","S4S_North4S","S5B_North5B","S5S_North5S","S6B_South1B","S6S_South1S","S7B_South2B","S7S_South2S","S8B_South3B","S8S_South3S","S9B_South4B","S9S_South4S")
+
+sample_new_names <- paste(selection30_sample$SampName,
+                          selection30_sample$Description,
+                          sep = "_")
+
+#Z-score transformation (with scale)
+heat <- t(base::scale(selection30_asv))
+#See
+head(data.frame(heat))
+```
+
+Haetmap Z-score
+```{r}
+ComplexHeatmap::Heatmap(
+  heat,
+  row_names_gp = grid::gpar(fontsize = 6),
+  cluster_columns = FALSE,
+  heatmap_legend_param = list(direction = "vertical",
+                              title = "Z-scores", 
+                              grid_width = unit(0.5, "cm"),
+                              legend_height = unit(3, "cm"))
+)
+```
+
+Ajout de la taxonomy pour les noms d'ASV
+```{r}
+#get taxnomic table
+taxon <- phyloseq::tax_table(selection30) |>
+  as.data.frame()
+
+#concatene ASV with Phylum & Family names
+myname <- paste(rownames(taxon), taxon$Phylum, taxon$Family, sep="_")
+#apply
+colnames(selection30_asv) <- myname
+```
+
+Application à la heatmap
+```{r}
+#re-run Z-score to take into account the colnames change
+heat <- t(scale(selection30_asv))
+
+my_top_annotation <- ComplexHeatmap::anno_block(gp = grid::gpar(fill =c(3,4)),
+                                               labels = c(1, 2),
+                                               labels_gp = grid::gpar(col = "white",
+                                                                      fontsize = 10))
+
+ComplexHeatmap::Heatmap(
+  heat,
+  row_names_gp = grid::gpar(fontsize = 6),
+  cluster_columns =TRUE,
+  heatmap_legend_param = list(direction = "vertical",
+   title ="Z-scores",
+   grid_width = unit(0.5, "cm"),
+   legend_height = unit(4, "cm")),
+  top_annotation = ComplexHeatmap::HeatmapAnnotation(foo = my_top_annotation),
+  column_km = 2,
+  column_names_gp= grid::gpar(fontsize = 6)
+  )
+```
+
+Ajout d'un boxplot de la distribution d'abondance des ASV dans les échantillons (Dans combien d'échantillon est présent cet ASV ?) 
+```{r}
+boxplot <- ComplexHeatmap::anno_boxplot(t(selection30_asv), 
+                                        which = "row",
+                                        gp = grid::gpar(fill = "turquoise3"))
+
+my_boxplot_left_anno <- ComplexHeatmap::HeatmapAnnotation(Abund = boxplot,
+                                                          which = "row",
+                                                          width = unit(3, "cm"))
+
+my_top_anno <- ComplexHeatmap::anno_block(gp = grid::gpar(fill = c(3, 6)),
+                                          labels = c("South", "North"),
+                                          labels_gp = grid::gpar(col = "white",
+                                                                fontsize = 10))
+
+my_top_anno <- ComplexHeatmap::HeatmapAnnotation(foo = my_top_anno)
+
+ComplexHeatmap::Heatmap(
+  heat,
+  row_names_gp = grid::gpar(fontsize = 7),
+  left_annotation = my_boxplot_left_anno, 
+  heatmap_legend_param = list(direction = "vertical",
+                              title ="Z-scores",
+                              grid_width = unit(0.5, "cm"),
+                              legend_height = unit(3, "cm")),
+  top_annotation = my_top_anno,
+  column_km = 2,
+  cluster_columns = TRUE,
+  column_dend_side = "bottom",
+  column_names_gp = grid::gpar(fontsize = 7)
+  )
+```
+
+Nous pouvons maintenant observer que les communautés microbiennes des échantillons du sud diffèrent dans leur composition microbienne de celles des échantillons du nord. L’effet significatif du traitement (Nord/Sud) reste à tester statistiquement. 
+Cette différence dans la composition de la communauté est due à l’abondance différentielle apparente de nombreux ASV principaux du jeu de données. L’identification de biomarqueurs significatifs dans les échantillons du Nord et du Sud sera abordée plus tard.
 
 
+# Partie 6 : Analyse de gradient indirect
 
 
 
