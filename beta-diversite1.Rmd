@@ -1213,7 +1213,6 @@ La diminution de la similarité des assemblages avec la distance spatiale peut s
 On calcule d’abord la matrice de distance spatiale. 
 Afin de calculer la distance kilométrique entre les points d'échantillonnage à partir de coordonnées géographiques, on a utilisé le package SpatialEpi et la fonction latlong2grid(). Ici, vous allez charger le résultat de cette fonction car il y a un conflit avec ce package et le package betapart qu'on utilise après.
 
-
 ```{r}
 #library(SpatialEpi)
 #ANFcoord <- read.table("Location_coordinates.txt", sep = "\t", row.names = 1, header = T)
