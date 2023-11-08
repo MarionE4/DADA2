@@ -6,13 +6,13 @@ output: html_document
 ---
 # Partie 1
 
-```{r}
+```{r,eval=FALSE}
 setwd("~/DADA2/course-material-main")
 ```
 
 
 Charger les librairies utiles.
-```{r, eval=FALSE}
+```{r}
 library(phyloseq)
 library(ggplot2)
 library(dplyr)
@@ -1103,15 +1103,278 @@ Pourquoi ? Parce que l'ajustement de R2 est trop important ?
 
 ### Sélection des variables
 
+Parfois on veut réduire le nombre de variables explicatives pour différentes raisons (parcimonie, ensemble de données riches mais mauvaises hypothèses a priori et possibles dépendances linéaires fortes (corrélations) entre les variables explicatives du modèle RDA).
+
+Une approche simple pour identifier la colinéarité entre les variables explicatives consiste à utiliser des facteurs d'inflation de variance (VIF). Les calculs VIF sont simples et facilement compréhensibles ; plus la valeur est élevée, plus la colinéarité est élevée. VIF mesure la proportion dans laquelle la variance d'un coefficient de régression est gonflée en présence d'autres variables explicatives. Les VIF supérieurs à 20 indiquent une forte colinéarité. Idéalement, les VIF supérieurs à 10 devraient au moins être examinés et évités si possible.
+```{r}
+# Variance inflation factors (VIF)
+vegan::vif.cca(spe_rda)
+```
+Salinité, Température et Sigma.t ont des VIF très élevés qui confirment les colinéarités observées précédemment entre variables explicatives (voir la section PERMANOVA). Une réduction du nombre de variables explicatives est justifiée. Afin de simplifier ce modèle, on peut effectuer une sélection vers l'avant (ou vers l'arrière ou par étapes). Ces types de sélections nous aident à sélectionner des variables statistiquement importantes. 
+Cependant, il est important de noter que la sélection écologique des variables est bien plus importante que la sélection de cette manière. Si une variable d’intérêt écologique n’est pas sélectionnée, cela ne signifie pas qu’elle doit être retirée de la RDA. Ici, on effectue une sélection avancée sur nos 11 variables environnementales. Pour ce faire, on utilise la fonction ordiR2step() :
+
+```{r}
+# Forward selection of explanatory variables using vegan's ordiR2step()
+step_forward <- vegan::ordiR2step(vegan::rda(t(physeq_clr_asv) ~ 1,
+                                             data = metadata[, 11:21]),
+                                  scope = formula(spe_rda),
+                                  direction = "forward",
+                                  pstep = 1000)
+```
+Ici, on ajoute essentiellement une variable à la fois et la conservons si elle augmente considérablement le R2 ajusté du modèle. La sélection directe nous montre qu'un modèle avec uniquement la salinité a un ajustement R2 plus élevé qu'avec toutes les variables et explique 18,4 % de la variance. 
+Calculons ce RDA, le plus parcimonieux, et vérifions sa signification.
+
+```{r}
+# Parsimonious RDA
+spe_rda_pars <- vegan::rda(t(physeq_clr_asv) ~ S, data = metadata[, 11:21])
+anova(spe_rda_pars, step = 1000)
+```
+```{r}
+anova(spe_rda_pars, step = 1000, by = "axis")
+```
+```{r}
+R2adj_pars <- vegan::RsquareAdj(spe_rda_pars)$adj.r.squared
+
+# Compare variance inflation factors
+vegan::vif.cca(spe_rda)
+```
+```{r}
+vegan::vif.cca(spe_rda_pars)
+```
+Désormais, le modèle et le premier axe canonique résultant de la RDA sont statistiquement significatifs (p < 0,05). Le VIF de salinité n'est que de 1. 
+Ce modèle RDA est interprétable. Traçons-le.
 
 
+### RDA plot
+```{r}
+# Preparation of the data for the plot
+#
+# View analysis results
+ii <- summary(spe_rda_pars)
+
+# Depending on the drawing result
+# the drawing data can be enlarged or
+# reduced to a certain extent, as follows
+sp <- as.data.frame(ii$species[, 1:2]) * 2
+sp_top <- sp[order(abs(sp$RDA1), decreasing = TRUE), ][1:6, ]
+
+st <- as.data.frame(ii$sites[, 1:2])
+st <- merge(st,
+      metadata["Geo"],
+      by = "row.names")
+
+yz <- t(as.data.frame(ii$biplot[, 1:2]))
+row.names(yz) <- "Salinity"
+yz <- as.data.frame(yz)
+
+eigen_values <- format(100 *ii$cont[[1]][2,], digits=4)
+
+#plot
+ggplot() +
+  geom_point(data = st, size = 4,
+             aes(x = RDA1, y = PC1,
+                 shape = Geo, fill = Geo)) +
+  scale_shape_manual(values = c(21:25)) +
+  geom_segment(data = sp_top,
+               arrow = arrow(angle = 22.5,
+                             length = unit(0.35, "cm"),
+                             type = "closed"),
+               linetype = 1, size = 0.6, colour = "red",
+               aes(x = 0, y = 0, xend = RDA1, yend = PC1)) +
+  ggrepel::geom_text_repel(data = sp_top,
+                           aes(x = RDA1, y = PC1, label = row.names(sp_top))) +
+  geom_segment(data = yz,
+               arrow = arrow(angle = 22.5,
+                             length = unit(0.35,"cm"),
+                             type = "closed"),
+               linetype = 1, size = 0.6, colour = "blue",
+               aes(x = 0, y = 0, xend = RDA1, yend = PC1)) +
+  ggrepel::geom_text_repel(data = yz, aes(RDA1, PC1, label=row.names(yz)))+
+  labs(x = paste("RDA 1 (", eigen_values[1], "%)", sep = ""),
+       y = paste("PC 1 (", eigen_values[2], "%)", sep = ""))+
+  geom_hline(yintercept = 0,linetype = 3,size = 1) + 
+  geom_vline(xintercept = 0,linetype = 3,size = 1)+
+  guides(shape = guide_legend(title = NULL,
+         color = "black"),
+         fill = guide_legend(title = NULL))+
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+L'un des aspects les plus puissants de la RDA est la visualisation simultanée de votre réponse et des variables explicatives (c'est-à-dire les espèces et les variables environnementales). 
+De cette ordination, on peut vraiment dire maintenant que la salinité est le principal facteur environnemental mesuré qui façonne les communautés bactériennes. Parmi tous les ASV, certains sont davantage liés à ce gradient de salinité. C'est le cas des ASV 12 et 11 pour lesquels l'abondance augmente lorsque la salinité diminue et de l'ASV 7 qui présente le schéma inverse. 
+Ces modèles d'abondance différentielle peuvent être explorés avec de nombreux types d'analyses, mais ce qui est vraiment puissant avec la RDA, c'est qu'on met en évidence des relations de gradient et non une différence d'abondance entre deux conditions. 
+Cependant, une grande partie de la variance au sein de la communauté bactérienne reste inexpliquée. La variance des communautés d’espèces peut s’expliquer par des processus déterministes comme le tri des espèces (influence de l’environnement comme on l’a vu ici) mais aussi par des processus stochastiques comme la dispersion qui dépendent entre autres de la distance entre les communautés. Puisque nous disposons de ces informations, examinons un modèle très courant en écologie communautaire : le modèle de distance-décroissance.
 
 
+## Régression multiple sur matrices de dissimilarité (MRM)
+
+La diminution de la similarité des assemblages avec la distance spatiale peut s'expliquer par des mécanismes alternatifs : limitation de la dispersion et tri des espèces. Pour comprendre leurs contributions relatives, on compare la diminution de la similarité bactérienne avec la distance spatiale et, indépendamment, avec la distance environnementale.
+
+On calcule d’abord la matrice de distance spatiale. 
+Afin de calculer la distance kilométrique entre les points d'échantillonnage à partir de coordonnées géographiques, on a utilisé le package SpatialEpi et la fonction latlong2grid(). Ici, vous allez charger le résultat de cette fonction car il y a un conflit avec ce package et le package betapart qu'on utilise après.
 
 
+```{r}
+#library(SpatialEpi)
+#ANFcoord <- read.table("Location_coordinates.txt", sep = "\t", row.names = 1, header = T)
+#ANF_km <- latlong2grid(ANFcoord[,1:2])
+#rownames(ANF_km) <- rownames(ANFcoord)
+
+ANF_km <- readRDS("~/DADA2/course-material-main/data/beta_diversity/spatial_distance.rds")
+ANF_km_dist <- dist(ANF_km)
+```
+
+Ensuite, la relation entre la similarité microbienne par paire et la distance spatiale est évaluée en ajustant une fonction exponentielle négative décrivant la diminution de la similarité microbienne avec la distance spatiale.
+```{r}
+#Calculate and add model to the plot
+
+ANF_decay_exp <- betapart::decay.model(physeq_clr_dist/100,
+                                       ANF_km_dist,
+                                       y.type="dissim",
+                                       model.type="exp",
+                                       perm=100)
+
+#Plot Distance decay relationships
+plot(ANF_km_dist, physeq_clr_dist/100,
+     ylim=c(0, max(physeq_clr_dist/100)),
+     xlim=c(0, max(ANF_km_dist)),
+     xlab = "Distance (km)", ylab = "Dissimilarity (CLR)")
+
+betapart::plot.decay(ANF_decay_exp, col = "blue",
+                     remove.dots = TRUE, add = TRUE)
+
+legend("bottomright",
+       paste("exp: (Beta =", round(ANF_decay_exp$second.parameter, 4),
+             ", Rsqr =", round(ANF_decay_exp$pseudo.r.squared, 2),
+             ", p =", round(ANF_decay_exp$p.value, 2)),
+       fill = "blue")
+```
+Le modèle exponentiel négatif expliquait de manière significative la décroissance en similarité avec la distance spatiale (p < 0,01). 
+
+Mais quelle est la contribution de la dispersion et du tri des espèces dans ce schéma ?  Pour cela on va décomposer la variance entre les matrices spatiale et environnementale.
+```{r}
+#Variance partitioning
+#Microbiam matrix (response)
+physeq_clr_dist_square <- phyloseq::distance(physeq_clr,
+                                             method = "euclidean",
+                                             diag = TRUE,
+                                             upper = TRUE)
+
+#Spatial matrix (explicative)
+ANF_km_dist_square <- dist(ANF_km, diag = TRUE, upper = TRUE)
+
+#environmental matrix (explicative)
+envdata <- dist(metadata[,11:21], diag = TRUE, upper = TRUE)
+```
+
+```{r}
+#Multiple regressions on Matrices (MRM) - attention les colonnes et lignes des matrices doivent correspondrent (pas besoin d'avoir les mêmes noms)
+
+ecodist::MRM(physeq_clr_dist_square ~ envdata + ANF_km_dist_square, nperm=1000) # 0.366
+```
+
+```{r}
+ecodist::MRM(physeq_clr_dist_square ~ envdata, nperm=1000) # 0.212
+```
+
+```{r}
+ecodist::MRM(physeq_clr_dist_square ~ ANF_km_dist_square, nperm=1000) # 0.238
+```
+
+```{r}
+modEvA::varPart(A = 0.212, B = 0.238, AB = 0.366,
+                A.name = "Environmental",
+                B.name = "Dispersal limitation")
+```
+En utilisant des matrices de régression multiple sur les distances (MRM), les variables spatiales et environnementales se sont révélées être des prédicteurs significatifs de la bêta-diversité et ont expliqué ensemble 36,7% de la variation de la dissimilarité des communautés microbiennes. 
+Le partitionnement de la variance a ensuite été utilisé pour diviser la variation en composantes environnementales purement spatiales, purement environnementales et structurées spatialement. 
+Avec 15,4%, la variation de dissimilarité expliquée par la composante purement spatiale était supérieure à la variation expliquée par la composante environnementale, indiquant que la dispersion est un processus important qui façonne nos communautés.
 
 
+# 9. Analyse différentielle d'abondance (DAA)
 
+L’objectif des tests d’abondance différentielle est d’identifier des taxons spécifiques associés à des variables de métadonnées d’intérêt. C'est une tâche difficile. Il s’agit également de l’un des domaines les plus controversés de l’analyse des données sur le microbiome. Cela est lié aux préoccupations selon lesquelles les approches de normalisation et de test n’ont généralement pas réussi à contrôler les taux de fausses découvertes.
+
+Ils existent pleins d'outils pour réaliser une DAA.
+Près et al. (2022) ont comparés les méthodes les plus populaires et on montré que ALDEx2 et ANCOM-BC produisent les résultats les plus cohérents d'un jeu de données à l'autre. Les résultats peuvent différés d'une méthode à l'autre car elles utilisent des approches différentes. Il est donc recommander d'utiliser plusieurs méthodes pour avoir une idée de la robsutesse et de la reproductibilité des résulatats.
+
+Ici, application de 3 méthodes actuellement utilisées en écologie microbienne et comparaison des résultats entre les méthodes.
+
+
+## Analyse discriminante linéaire Taille de l'effet (LEFse)
+
+LEFse utilise d'abord le test de classement factoriel non paramétrique de Kruskal-Wallis (KW) pour détecter les caractéristiques présentant une abondance différentielle significative par rapport à la classe d'intérêt ; la cohérence biologique est ensuite étudiée à l'aide d'un ensemble de tests par paires parmi les sous-classes à l'aide du test de somme des rangs de Wilcoxon (non apparié). Dans une dernière étape, LEfSe utilise LDA pour estimer la taille de l'effet de chaque caractéristique différentiellement abondante.
+```{r}
+#LEFSE
+mm_lefse <- microbiomeMarker::run_lefse(physeq, norm = "CPM",
+                                        wilcoxon_cutoff = 0.01,
+                                        group = "Geo",
+                                        taxa_rank = "none",
+                                        kw_cutoff = 0.01,
+                                        multigrp_strat = TRUE,
+                                        lda_cutoff = 4)
+
+mm_lefse_table <- data.frame(mm_lefse@marker_table)
+mm_lefse_table
+```
+```{r}
+p_LDAsc <- microbiomeMarker::plot_ef_bar(mm_lefse)
+y_labs <- ggplot_build(p_LDAsc)$layout$panel_params[[1]]$y$get_labels()
+p_abd <- microbiomeMarker::plot_abundance(mm_lefse, group = "Geo") +
+  scale_y_discrete(limits = y_labs)
+gridExtra::grid.arrange(p_LDAsc, p_abd, nrow = 1)
+```
+LEFse identifie 12 biomarqueurs et parmi ceux là il y a les ASV 7, 11 et 12 qu'on a déjà croisé précédemment.
+
+
+## Analyse différentielle des compositions de microbiomes avec correction des biais (ANCOM-BC)
+
+La méthodologie ANCOM-BC suppose que l'échantillon observé est une fraction inconnue d'une unité de volume de l'écosystème et que la fraction d'échantillonnage varie d'un échantillon à l'autre. 
+ANCOM-BC prend en compte la fraction d'échantillonnage en introduisant un terme de décalage spécifique à l'échantillon dans un cadre de régression linéaire, estimé à partir des données observées. Le terme de décalage sert de correction du biais, et le cadre de régression linéaire en échelle logarithmique est analogue à la transformation log-ratio pour traiter la compositionnalité des données du microbiome. De plus, cette méthode fournit des valeurs p et des intervalles de confiance pour chaque taxon. Il contrôle également le FDR et sa mise en œuvre est simple sur le plan informatique.
+```{r}
+#ancomBC
+mm_ancombc <- run_ancombc_patched(
+  physeq,
+  group = "Geo",
+  taxa_rank = "none",
+  pvalue_cutoff = 0.001,
+  p_adjust = "fdr"
+)
+
+mm_ancombc_table <- data.frame(mm_ancombc@marker_table)
+mm_ancombc_table
+```
+```{r}
+an_ef <- microbiomeMarker::plot_ef_bar(mm_ancombc)
+y_labs <- ggplot_build(an_ef)$layout$panel_params[[1]]$y$get_labels()
+an_abd <- microbiomeMarker::plot_abundance(mm_ancombc, group = "Geo") +
+  scale_y_discrete(limits = y_labs)
+gridExtra::grid.arrange(an_ef, an_abd, nrow = 1)
+```
+La fonction run_ancombc_patched n'est pas trouvé donc le code ne fonctionne pas.
+
+ANCOM-BC devrait identifier 10 biomarqueurs et ils sont tous communs à ceux trouvé par l'analyse LEFse.
+
+
+## Expression différentielle de type ANOVA (ALDEx2)
+
+ALDEx2 estime la variation technique au sein de chaque échantillon par taxon en utilisant la distribution de Dirichlet. 
+Il applique en outre la transformation de rapport logarithmique centrée (ou des transformations de rapport logarithmique étroitement liées). En fonction de la configuration expérimentale, il effectuera un test T de Welch et un test de Wilcoxon à deux échantillons ou un test ANOVA unidirectionnel et un test de Kruskal-Wallis. La procédure Benjamini-Hochberg est appliquée dans tous les cas pour corriger les tests multiples.
+
+```{r}
+mm_aldex <- microbiomeMarker::run_aldex(physeq, group = "Geo",
+                                        norm = "CPM",
+                                        taxa_rank = "none",
+                                        p_adjust = "fdr")
+
+mm_aldex_table <- data.frame(mm_aldex@marker_table)
+mm_aldex_table
+```
+
+ALDEx2 est beaucoup plus strict et identifie un seul biomarqueur, ASV 27 qui a été identifié par les deux autres méthodes DAA. 
+Les autres n’atteignent pas le seuil FDR utilisé ici ; bien qu’ils aient probablement des tailles d’effet «importantes». 
+
+Souvent, si on envisage d'effectuer des tests DA, on exécuterai plusieurs modèles et se concentrerai sur l'intersection des OTU données par au moins deux méthodes. Ici, il s'agirait des 10 ASV identifié à l'ANCOM-BC.
 
 
 
