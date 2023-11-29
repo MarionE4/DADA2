@@ -1,0 +1,36 @@
+---
+title: "Article"
+output: github_document
+---
+
+## 1.Préparation du répertoire de travail
+
+
+```{bash, eval=FALSE}
+#wget -i sequences.txt
+#Les séquences zipper on été placé dans un dossier nommé "fastq"
+```
+
+(re)Défini la racine de notre projet sur notre ordinateur.
+```{r}
+refdb_folder <- here::here("data", "refdb")
+refdb_folder
+```
+
+Création du vrai dossier refdb_folder (si rfdb_folder n'existe pas le créer, possibilité de créer des sous dossier également).
+```{r, eval=FALSE}
+if (!dir.exists(refdb_folder)) dir.create(refdb_folder,recursive = TRUE)
+```
+
+Lors téléchargement de données, R s'arrête au bout de 60 secondes. Changement de ce temps à 20 min.
+```{r, eval=FALSE}
+getOption("timeout")
+options(timeout = 1200)
+```
+
+
+
+
+
+
+
