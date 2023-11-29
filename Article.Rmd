@@ -28,6 +28,126 @@ getOption("timeout")
 options(timeout = 1200)
 ```
 
+Sauvegarder le chemin de refdb dans l'espace de travail DANS un objet.
+```{r}
+silva_train_set <- file.path(refdb_folder, 
+                             "silva_nr99_v138.1_train_set.fa.gz")
+silva_species_assignment <- file.path(refdb_folder, 
+                                      "silva_species_assignment_v138.1.fa.gz")
+```
+
+Téléchargement des fichiers s'ils n'existent pas.
+```{r, eval=FALSE}
+if (!file.exists(silva_train_set)){
+  download.file(
+    "https://zenodo.org/record/4587955/files/silva_nr99_v138.1_train_set.fa.gz",
+    silva_train_set,
+    quiet = TRUE
+  )
+}
+
+if (!file.exists(silva_species_assignment)) {
+  download.file(
+    "https://zenodo.org/record/4587955/files/silva_species_assignment_v138.1.fa.gz",
+    silva_species_assignment,
+    quiet = TRUE
+  )
+}
+
+```
+
+Téléchargement des outils.
+```{r}
+devtools::load_all(path = "/home/rstudio/DADA2/course-material-main/R/")
+```
+
+Sauvegarde du chemin d'accès au répertoire contenant les données brutes dans un objet.
+```{r}
+path_to_fastqs <- here::here("data", "fastq")
+```
+
+
+## 2.Fichiers d'entrées
+
+
+Faire une liste avec les fichiers forward. 
+```{r}
+fnFs <- sort(list.files(path_to_fastqs,
+                        pattern = "_1.fastq.gz",
+                        full.names=TRUE))
+```
+
+
+Faire la même chose avec les fichiers reverse.
+```{r}
+fnRs <- sort(list.files(path_to_fastqs,
+                        pattern = "_2.fastq.gz",
+                        full.names = TRUE))
+```
+
+
+basename() : permet de garder le nom du fichier ;
+
+strsplit() : sépare un chaîne de caractère au niveau d'un caractère donné ; 
+|> : permet de mettre plusieurs fonctions à la suite sans avoir à utiliser de multiples objets ;
+
+sapply() : ici extrait le premier élément de la liste.
+```{r}
+sample_names <- basename(fnFs) |>
+  strsplit(split = "_") |>
+  sapply(head, 1) |>
+  head()
+```
+
+
+## 3.Vérification de la qualité des séquences
+
+
+Création d'un fichier où stocker les données de sortie du qualityprofile.
+Vérification de la qualité des profils.
+```{r, eval=FALSE}
+quality_folder <- here::here("outputs",
+                             "dada2",
+                             "quality_plots")
+
+if (!dir.create(quality_folder)) {
+  dir.create(quality_folder, recursive = TRUE)
+}
+
+qualityprofile(fnFs,
+               fnRs,
+               file.path(quality_folder, "quality_plots.pdf"))
+```
+
+## 4.Enlèvement des séquences des amorces
+
+
+Création d'un dossier dans lequel sera enregistré les reads une fois les séquences des amorces retirées.
+```{r}
+path_to_trimmed_reads <- here::here(
+  "outputs",
+  "dada2",
+  "trimmed"
+)
+
+if (!dir.exists(path_to_trimmed_reads)) dir.create(path_to_trimmed_reads, recursive = TRUE)
+```
+
+Les données correspondent à la région V3-V4 (460pb), en utilisant les amorces Forward 5′ TCGTC-GGCAGCGTCAGATGTGT-ATAAGAGACAGCCTACGGGNGGCWGCAG and reverse 5′ GTCTCGTGGG-CTCGGAGATGTGT-ATAAGAGACAGGACTACHV-GGGTATCTAATCC
+```{r}
+primer_fwd  <- "TCGTCGGCAGCGTCAGATGTGT"
+primer_rev  <- "GTCTCGTGGGCTCGGAGATGTGT"
+```
+
+
+Trouver la séquence de l'amorce forward dans les reads forward.
+```{r}
+Biostrings::readDNAStringSet(
+  fnFs[1],
+  format = "fastq",
+  nrec = 10
+)
+```
 
 
 
