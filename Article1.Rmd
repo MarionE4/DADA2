@@ -1,0 +1,65 @@
+---
+title: "Article1"
+author: "Marion MENEC"
+date: "2023-11-29"
+output: github_document
+---
+
+```{r}
+refdb_folder <- here::here("DADA2", "sequences")
+refdb_folder
+```
+
+```{r, eval=FALSE}
+if (!dir.exists(refdb_folder)) dir.create(refdb_folder,recursive = TRUE)
+```
+
+Téléchargement des outils.
+```{r}
+devtools::load_all(path = "/home/rstudio/DADA2/course-material-main/R/")
+```
+```{r}
+path_to_fastqs <- here::here("DADA2", "sequences")
+```
+
+
+## 2.Fichiers d'entrées
+
+
+Faire une liste avec les fichiers forward. 
+```{r}
+fnFs <- sort(list.files(path_to_fastqs,
+                        pattern = "_1.fastq.gz",
+                        full.names=TRUE))
+```
+
+
+Faire la même chose avec les fichiers reverse.
+```{r}
+fnRs <- sort(list.files(path_to_fastqs,
+                        pattern = "_2.fastq.gz",
+                        full.names = TRUE))
+```
+
+```{r}
+basename(fnFs)
+```
+
+
+basename() : permet de garder le nom du fichier ;
+
+strsplit() : sépare un chaîne de caractère au niveau d'un caractère donné ; 
+|> : permet de mettre plusieurs fonctions à la suite sans avoir à utiliser de multiples objets ;
+
+sapply() : ici extrait le premier élément de la liste.
+```{r}
+sample_names <- basename(fnFs) |>
+  strsplit(split = "_") |>
+  sapply(head, 1) 
+```
+```{r}
+head(sample_names)
+```
+
+
+
