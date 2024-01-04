@@ -24,9 +24,16 @@ options(timeout = 1200)
 ```
 
 Téléchargement des outils.
-```{r}
+```{r, eval=FALSE}
 devtools::load_all(path = "/home/rstudio/DADA2/course-material-main/R/")
 ```
+
+
+```{r}
+library(dada2); packageVersion("dada2")
+```
+
+
 ```{r, eval=FALSE}
 # Lire les liens FTP à partir du fichier sequences.txt
 ftp_links <- readLines("sequences.txt")
@@ -129,11 +136,347 @@ sample_names <- basename(fnFs) |>
   sapply(head, 1)
 head(sample_names)
 ```
-youpi ça fonctionne enfin !!!!!
+
+
+## 3.Vérification de la qualité des séquences
+
+
+Création d'un fichier où stocker les données de sortie du qualityprofile.
+Vérification de la qualité des profils.
+```{r, eval=FALSE}
+quality_folder <- here::here("outputs",
+                             "article",
+                             "quality_plots")
+
+if (!dir.create(quality_folder)) {
+  dir.create(quality_folder, recursive = TRUE)
+}
+
+qualityprofile(fnFs,
+               fnRs,
+               file.path(quality_folder, "quality_plots.pdf"))
+```
+
+
+## 4.Enlèvement des séquences des amorces
+
+
+Création d'un dossier dans lequel sera enregistré les reads une fois les séquences des amorces retirées.
+```{r}
+path_to_trimmed_reads <- here::here(
+  "outputs",
+  "article",
+  "trimmed"
+)
+
+if (!dir.exists(path_to_trimmed_reads)) dir.create(path_to_trimmed_reads, recursive = TRUE)
+```
+
+
+Amorces forward (TCGTC-GGCAGCGTCAGATGTGTATAAGAGACAGCCTACGGGNGGCWGCAG) et reverse (GTCTCGTGGG-CTCGGAGATGTGTATAAGAGACAGGACTACHV-GGGTATCTAATCC).
+```{r}
+primer_fwd  <- "TCGTC-GGCAGCGTCAGATGTGTATAAGAGACAGCCTACGGGNGGCWGCAG"
+primer_rev  <- "GTCTCGTGGG-CTCGGAGATGTGTATAAGAGACAGGACTACHV-GGGTATCTAATCC"
+```
+
+
+Trouver la séquence de l'amorce forward dans les reads forward.
+```{r}
+Biostrings::readDNAStringSet(
+  fnFs[1],
+  format = "fastq",
+  nrec = 10
+)
+```
+
+
+Trouver la séquence de l'amorce reverse dans les reads reverse.
+```{r}
+Biostrings::readDNAStringSet(
+  fnRs[1],
+  format = "fastq",
+  nrec = 10
+)
+```
+
+
+On enlève les séquences des amorces des reads.
+```{r, eval=FALSE}
+(primer_log <- primer_trim(
+  forward_files = fnFs,
+  reverse_files = fnRs,
+  primer_fwd = primer_fwd,
+  primer_rev = primer_rev,
+  output_dir = path_to_trimmed_reads,
+  min_size = 200
+))
+# Ne fonctionne pas puisque que mes fichiers se finissent par _1 et _2 et non par _R1 et _R2.
+```
+
+## 5.Découpage et filtrage de qualité
+
+
+Création d'un dossier et des listes de chemins d'accès pour les reads qui seront filtrés.
+```{r, echo=TRUE}
+path_to_filtered_reads <- here::here("outputs", "article","filtered")
+if (!dir.exists(path_to_filtered_reads)) dir.create(path_to_filtered_reads, recursive = TRUE)
+
+filtFs <- file.path(path_to_filtered_reads, basename(fnFs))
+filtRs <- file.path(path_to_filtered_reads, basename(fnRs))
+```
+
+
+Pour faire le lien entre les fichiers et les noms d'échantillons, nommer simplement le vecteur de noms de fichiers en utilisant les noms d'échantillons. 
+```{r, echo=TRUE}
+names(filtFs) <- sample_names
+names(filtRs) <- sample_names
+```
+
 
 ```{r}
-
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(240,160),
+              maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
+              compress=TRUE, multithread=TRUE) # On Windows set multithread=FALSE
+head(out)
 ```
+
+
+## 6.Débruitage
+
+
+Enlever les erreurs de séquençage : regarder la séquence majoritaire et corriger.
+
+
+Création d'un modèle d'erreur.
+
+```{r}
+errF <- learnErrors(filtFs, multithread=TRUE)
+```
+
+```{r, echo=TRUE}
+errR <- learnErrors(filtRs, multithread=TRUE)
+```
+
+
+Visualisation des modèles d'erreur.
+```{r, echo=TRUE}
+dada2::plotErrors(errF, nominalQ = TRUE)
+```
+
+```{r, echo=TRUE}
+dada2::plotErrors(errR, nominalQ = TRUE)
+```
+
+
+
+Déreplication :
+
+Ne garder qu'un seul exemplaire des séquences en multiples exemplaires et mettre dans un fichier combien de fois on a trouvé cette séquence.
+```{r}
+derepFs <- dada2::derepFastq(filtFs, verbose = TRUE)
+```
+
+```{r}
+derepRs <- dada2::derepFastq(filtRs, verbose = TRUE)
+```
+
+
+Enlèvement des erreurs de séquençage.
+```{r}
+dadaFs <- dada2::dada(derepFs, err = errF, multithread = TRUE)
+```
+
+```{r}
+dadaRs <- dada2::dada(derepRs, err = errR, multithread = TRUE)
+```
+
+
+## 7.Fusions des reads appariés
+
+
+Une fois que les erreurs de séquençage enlevés, faire l'alignement des forward et des reverse, il y a création de contigues. Il n'y a plus de R1 et R2.
+```{r}
+mergers <- dada2::mergePairs(
+  dadaF = dadaFs,
+  derepF = derepFs,
+  dadaR = dadaRs,
+  derepR = derepRs,
+  maxMismatch = 0,
+  verbose = TRUE
+)
+```
+
+
+## 8.Construction de la matrice d'observation
+
+
+```{r}
+seqtab <- dada2::makeSequenceTable(mergers)
+```
+
+
+## 9.Enlevement des chimères (artefact)
+
+
+Lors de la réplication, l'ADN polymérase peut se détacher et arrêter la polymérisation. A la fin du cycle PCR, il y a 1 brin mère et un petit brin fille pour cette bactérie. Ce petit brin fille peut venir s'amorcer/se fixer au brin mère d'une autre bactérie et l'ADN polymérase va reprendre élongation. Il y aura alors création de chimère : brin mixte d'une bactérie 1 et d'une bactérie 2.
+```{r}
+seqtab_nochim <- dada2::removeBimeraDenovo(seqtab,
+                                           method = "consensus",
+                                           multithread = TRUE,
+                                           verbose = TRUE)
+```
+
+
+## 10.Assignation taxonomique
+
+
+Calcul par pourcentage de chance, en partant du haut de l'arbre et descend peu à peu. Il s'arrête un embranchement quand pour celui d'après le pourcentage est inférieur au pourcentage défini. L'assignation à une espèce ne dépend que de la base de données.
+```{r}
+taxonomy <- dada2::assignTaxonomy(
+  seqs = seqtab_nochim,
+  refFasta = silva_train_set,
+  taxLevels = c("Kingdom", "Phylum", "Class",
+                "Order", "Family", "Genus",
+                "Species"),
+  multithread = TRUE,
+  minBoot = 60
+)
+```
+
+
+Permet l'assignation taxonomique au rang d'espèce, ce que ne permet pas les lignes de code précédentes.
+```{r}
+taxonomy <- dada2::addSpecies(
+  taxonomy,
+  silva_species_assignment,
+  allowMultiple = FALSE
+)
+```
+
+
+## 11.Export des données
+
+
+Cette section correspond au téléchargement de l'environnement R sur notre ordinateur.
+
+Les résultats peuvent être exportés comme un objet R, 1 pour le tableau ASV et un autre pour la taxonomie.
+```{r}
+export_folder <- here::here("outputs", "dada2", "asv_table")
+
+if (!dir.exists(export_folder)) dir.create(export_folder, recursive = TRUE)
+
+saveRDS(object = seqtab_nochim,
+        file = file.path(export_folder, "seqtab_nochim.rds"))
+
+saveRDS(object = taxonomy,
+        file = file.path(export_folder, "taxonomy.rds"))
+```
+
+
+Le but des lignes suivantes est de transformer nos résultats en fichier texte.
+Création d'une variable pour collecter les séquences ASV.
+```{r}
+asv_seq <- colnames(seqtab_nochim)
+```
+
+
+Création d'identifiant (id) unique pour chaque ASV (plus court que la séquence en elle-même).
+```{r}
+ndigits <- nchar(length(asv_seq))
+asv_id <- sprintf(paste0("ASV_%0", ndigits, "d"), seq_along(asv_seq))
+```
+
+
+Renomer les différentes variables avec les nouveaux id.
+```{r}
+row.names(taxonomy) <- colnames(seqtab_nochim) <- names(asv_seq) <- asv_id
+```
+
+
+Convertir les ASV ids (nom des lignes)dans une nouvelle colonne nommée "asv".
+```{r}
+taxonomy_export <- df_export(taxonomy, new_rn = "asv")
+
+seqtab_nochim_export <- t(seqtab_nochim)
+seqtab_nochim_export <- df_export(seqtab_nochim_export, new_rn = "asv")
+```
+
+
+Finalement on peut exporter la taxonomie, le tableau ASV et les séquences (celles là en fichier fasta).
+```{r}
+write.table(taxonomy_export,
+            file = file.path(export_folder, "taxonomy.tsv"),
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE)
+
+write.table(seqtab_nochim_export,
+            file = file.path(export_folder, "asv_table.tsv"),
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE)
+
+cat(paste0(">", names(asv_seq), "\n", asv_seq),
+    sep = "\n",
+    file = file.path(export_folder, "asv.fasta"))
+```
+
+
+Les statistiques de chaque étapes de prétraitement peuvent également être exportées.
+Il faut d'abord assembler le tableau.
+```{r, eval=FALSE}
+getN <- function(x) sum(dada2::getUniques(x))
+
+log_table <- data.frame(
+  input = primer_log$in_reads,
+  with_fwd_primer = primer_log$`w/adapters`,
+  with_rev_primer = primer_log$`w/adapters2` ,
+  with_both_primers = out[, 1],
+  filtered = out[, 2],
+  denoisedF = sapply(dadaFs, getN),
+  denoisedR = sapply(dadaRs, getN),
+  merged = sapply(mergers, getN),
+  nonchim = rowSums(seqtab_nochim),
+  perc_retained = rowSums(seqtab_nochim) / out[, 1] * 100
+)
+
+rownames(log_table) <- sample_names
+```
+
+
+Puis l'exporter.
+```{r, eval=FALSE}
+df_export(log_table, new_rn = "sample") |>
+  write.table(file = file.path(export_folder, "log_table.tsv"),
+              quote = FALSE,
+              sep = "\t",
+              row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
