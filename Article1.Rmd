@@ -5,8 +5,11 @@ date: "2023-11-29"
 output: github_document
 ---
 
+## 1.Préparation du répertoire de travail
+
+
 ```{r}
-refdb_folder <- here::here("DADA2", "sequences")
+refdb_folder <- here::here("article", "refdb")
 refdb_folder
 ```
 
@@ -14,12 +17,80 @@ refdb_folder
 if (!dir.exists(refdb_folder)) dir.create(refdb_folder,recursive = TRUE)
 ```
 
+Lors téléchargement de données, R s'arrête au bout de 60 secondes. Changement de ce temps à 20 min.
+```{r, eval=FALSE}
+getOption("timeout")
+options(timeout = 1200)
+```
+
 Téléchargement des outils.
 ```{r}
 devtools::load_all(path = "/home/rstudio/DADA2/course-material-main/R/")
 ```
+```{r, eval=FALSE}
+# Lire les liens FTP à partir du fichier sequences.txt
+ftp_links <- readLines("sequences.txt")
+
+# Dossier de sortie
+sequences <- "sequences"
+
+# Créer le dossier de sortie s'il n'existe pas
+if (!file.exists(sequences)) {
+  dir.create(sequences, recursive = TRUE)
+}
+
+# Fonction pour télécharger une séquence (forward ou reverse)
+download_sra_sequence <- function(ftp_link, output_directory) {
+  # Extraire l'identifiant SRA à partir du lien FTP
+  sra_id <- sub(".*/(SRR\\d+)/(SRR\\d+_\\d)\\.fastq\\.gz", "\\1_\\2", ftp_link)
+  
+  # Télécharger le fichier FASTQ
+  dest_file <- file.path(output_directory, paste0(sra_id, ".fastq.gz"))
+  download.file(ftp_link, dest_file, method = "auto")
+}
+
+# Télécharger les séquences pour chaque lien FTP
+for (ftp_link in ftp_links) {
+  download_sra_sequence(ftp_link, output_directory)
+}
+
+# Afficher le contenu du dossier de sortie
+dir(sequences)
+
+
+```
+
+
 ```{r}
-path_to_fastqs <- here::here("DADA2", "sequences")
+path_to_fastqs <- here::here("article", "sequences")
+```
+
+Sauvegarder le chemin de refdb dans l'espace de travail DANS un objet.
+```{r}
+silva_train_set <- file.path(refdb_folder, 
+                             "silva_nr99_v138.1_train_set.fa.gz")
+silva_species_assignment <- file.path(refdb_folder, 
+                                      "silva_species_assignment_v138.1.fa.gz")
+```
+
+Téléchargement des fichiers s'ils n'existent pas.
+```{r, eval=FALSE}
+if (!file.exists(silva_train_set)){
+  download.file(
+    "https://zenodo.org/record/4587955/files/silva_nr99_v138.1_train_set.fa.gz",
+    silva_train_set,
+    quiet = TRUE
+  )
+}
+
+if (!file.exists(silva_species_assignment)) {
+  download.file(
+    "https://zenodo.org/record/4587955/files/silva_species_assignment_v138.1.fa.gz",
+    silva_species_assignment,
+    quiet = TRUE
+  )
+}
+
 ```
 
 
@@ -55,10 +126,13 @@ sapply() : ici extrait le premier élément de la liste.
 ```{r}
 sample_names <- basename(fnFs) |>
   strsplit(split = "_") |>
-  sapply(head, 1) 
-```
-```{r}
+  sapply(head, 1)
 head(sample_names)
+```
+
+
+```{r}
+
 ```
 
 
