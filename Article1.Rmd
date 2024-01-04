@@ -129,7 +129,7 @@ sample_names <- basename(fnFs) |>
   sapply(head, 1)
 head(sample_names)
 ```
-
+youpi ça fonctionne enfin !!!!!
 
 ```{r}
 
