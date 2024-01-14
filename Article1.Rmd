@@ -109,7 +109,7 @@ if (!file.exists(silva_species_assignment)) {
 Faire une liste avec les fichiers forward. 
 ```{r}
 fnFs <- sort(list.files(path_to_fastqs,
-                        pattern = "_1.fastq.gz",
+                        pattern = "_R1.fastq.gz",
                         full.names=TRUE))
 ```
 
@@ -117,7 +117,7 @@ fnFs <- sort(list.files(path_to_fastqs,
 Faire la même chose avec les fichiers reverse.
 ```{r}
 fnRs <- sort(list.files(path_to_fastqs,
-                        pattern = "_2.fastq.gz",
+                        pattern = "_R2.fastq.gz",
                         full.names = TRUE))
 ```
 
@@ -177,8 +177,9 @@ if (!dir.exists(path_to_trimmed_reads)) dir.create(path_to_trimmed_reads, recurs
 
 Amorces forward (TCGTC-GGCAGCGTCAGATGTGTATAAGAGACAGCCTACGGGNGGCWGCAG) et reverse (GTCTCGTGGG-CTCGGAGATGTGTATAAGAGACAGGACTACHV-GGGTATCTAATCC).
 ```{r}
-primer_fwd  <- "TCGTC-GGCAGCGTCAGATGTGTATAAGAGACAGCCTACGGGNGGCWGCAG"
-primer_rev  <- "GTCTCGTGGG-CTCGGAGATGTGTATAAGAGACAGGACTACHV-GGGTATCTAATCC"
+primer_fwd  <- "TCGTCGGCAGCGTCAGATGTGTATAAGAGACAGCCTACGGGNGGCWGCAG"
+primer_rev  <- "GTCTCGTGGGCTCGGAGATGTGTATAAGAGACAGGACTACHVGGGTATCTAATCC"
+# J'ai du enlever les - dans la séquence des amorces sinon la fonction "primer_log" ne fonctionnait pas.
 ```
 
 
@@ -212,7 +213,7 @@ On enlève les séquences des amorces des reads.
   output_dir = path_to_trimmed_reads,
   min_size = 200
 ))
-# Ne fonctionne pas puisque que mes fichiers se finissent par _1 et _2 et non par _R1 et _R2.
+# J'ai du enlever les - dans la séquence des amorces sinon le chunck ne fonctionnait pas
 ```
 
 ## 5.Découpage et filtrage de qualité
@@ -251,25 +252,27 @@ Enlever les erreurs de séquençage : regarder la séquence majoritaire et corri
 
 Création d'un modèle d'erreur.
 
-```{r}
+```{r, eval=FALSE}
 errF <- learnErrors(filtFs, multithread=TRUE)
-# temps d'exécution extrêmement long (plus d'une heure)
+# temps d'exécution extrêmement long (plus d'une heure. Obliger de passer le chunck en eval=FALSE pour knit, mais le code fonctionne
 ```
 
-```{r, echo=TRUE}
+```{r, echo=TRUE, eval=FALSE}
 errR <- learnErrors(filtRs, multithread=TRUE)
+# Même chose que le chunck précédent.
 ```
 
 
 Visualisation des modèles d'erreur.
-```{r, echo=TRUE}
+```{r, echo=TRUE, eval=FALSE}
 dada2::plotErrors(errF, nominalQ = TRUE)
 ```
 
-```{r, echo=TRUE}
+```{r, echo=TRUE, eval=FALSE}
 dada2::plotErrors(errR, nominalQ = TRUE)
 ```
 
+Les modèles d'erreur sont sur le github dans le fichier "Article1_files".
 
 
 Déreplication :
@@ -284,12 +287,12 @@ derepRs <- dada2::derepFastq(filtRs, verbose = TRUE)
 ```
 
 
-Enlèvement des erreurs de séquençage.
-```{r}
+Enlèvement des erreurs de séquençage. Obliger de mettre en eval=FALSE mais fonctionne sinon.
+```{r, eval=FALSE}
 dadaFs <- dada2::dada(derepFs, err = errF, multithread = TRUE)
 ```
 
-```{r}
+```{r, eval=FALSE}
 dadaRs <- dada2::dada(derepRs, err = errR, multithread = TRUE)
 ```
 
@@ -298,7 +301,7 @@ dadaRs <- dada2::dada(derepRs, err = errR, multithread = TRUE)
 
 
 Une fois que les erreurs de séquençage enlevés, faire l'alignement des forward et des reverse, il y a création de contigues. Il n'y a plus de R1 et R2.
-```{r}
+```{r, eval=FALSE}
 mergers <- dada2::mergePairs(
   dadaF = dadaFs,
   derepF = derepFs,
@@ -313,7 +316,7 @@ mergers <- dada2::mergePairs(
 ## 8.Construction de la matrice d'observation
 
 
-```{r}
+```{r, eval=FALSE}
 seqtab <- dada2::makeSequenceTable(mergers)
 ```
 
@@ -322,7 +325,7 @@ seqtab <- dada2::makeSequenceTable(mergers)
 
 
 Lors de la réplication, l'ADN polymérase peut se détacher et arrêter la polymérisation. A la fin du cycle PCR, il y a 1 brin mère et un petit brin fille pour cette bactérie. Ce petit brin fille peut venir s'amorcer/se fixer au brin mère d'une autre bactérie et l'ADN polymérase va reprendre élongation. Il y aura alors création de chimère : brin mixte d'une bactérie 1 et d'une bactérie 2.
-```{r}
+```{r, eval=FALSE}
 seqtab_nochim <- dada2::removeBimeraDenovo(seqtab,
                                            method = "consensus",
                                            multithread = TRUE,
@@ -334,7 +337,7 @@ seqtab_nochim <- dada2::removeBimeraDenovo(seqtab,
 
 
 Calcul par pourcentage de chance, en partant du haut de l'arbre et descend peu à peu. Il s'arrête un embranchement quand pour celui d'après le pourcentage est inférieur au pourcentage défini. L'assignation à une espèce ne dépend que de la base de données.
-```{r}
+```{r, eval=FALSE}
 taxonomy <- dada2::assignTaxonomy(
   seqs = seqtab_nochim,
   refFasta = silva_train_set,
@@ -348,7 +351,7 @@ taxonomy <- dada2::assignTaxonomy(
 
 
 Permet l'assignation taxonomique au rang d'espèce, ce que ne permet pas les lignes de code précédentes.
-```{r}
+```{r, eval=FALSE}
 taxonomy <- dada2::addSpecies(
   taxonomy,
   silva_species_assignment,
@@ -363,7 +366,7 @@ taxonomy <- dada2::addSpecies(
 Cette section correspond au téléchargement de l'environnement R sur notre ordinateur.
 
 Les résultats peuvent être exportés comme un objet R, 1 pour le tableau ASV et un autre pour la taxonomie.
-```{r}
+```{r,eval=FALSE}
 export_folder <- here::here("outputs", "article", "asv_table")
 
 if (!dir.exists(export_folder)) dir.create(export_folder, recursive = TRUE)
@@ -378,26 +381,26 @@ saveRDS(object = taxonomy,
 
 Le but des lignes suivantes est de transformer nos résultats en fichier texte.
 Création d'une variable pour collecter les séquences ASV.
-```{r}
+```{r, eval=FALSE}
 asv_seq <- colnames(seqtab_nochim)
 ```
 
 
 Création d'identifiant (id) unique pour chaque ASV (plus court que la séquence en elle-même).
-```{r}
+```{r,eval=FALSE}
 ndigits <- nchar(length(asv_seq))
 asv_id <- sprintf(paste0("ASV_%0", ndigits, "d"), seq_along(asv_seq))
 ```
 
 
 Renomer les différentes variables avec les nouveaux id.
-```{r}
+```{r, eval=FALSE}
 row.names(taxonomy) <- colnames(seqtab_nochim) <- names(asv_seq) <- asv_id
 ```
 
 
 Convertir les ASV ids (nom des lignes)dans une nouvelle colonne nommée "asv".
-```{r}
+```{r, eval=FALSE}
 taxonomy_export <- df_export(taxonomy, new_rn = "asv")
 
 seqtab_nochim_export <- t(seqtab_nochim)
@@ -406,7 +409,7 @@ seqtab_nochim_export <- df_export(seqtab_nochim_export, new_rn = "asv")
 
 
 Finalement on peut exporter la taxonomie, le tableau ASV et les séquences (celles là en fichier fasta).
-```{r}
+```{r, eval=FALSE}
 write.table(taxonomy_export,
             file = file.path(export_folder, "taxonomy.tsv"),
             quote = FALSE,
@@ -458,7 +461,10 @@ df_export(log_table, new_rn = "sample") |>
               sep = "\t",
               row.names = FALSE)
 ```
+Jusqu'ici le code fonctionne. Je n'ai pas eu le temps de poursuivre plus à cause du temps de run des chuncks de création des modèles d'erreur. Tous la fin du code (qui est au dessus de ce texte) à du être mis en eval=FALSE, sinon je ne pouvais pas knit mais il fonctionne.
 
+
+Ci-après, les prémices de code de bétâ-diversité théorique qui aurait permis de continuer. Etant impossible de créer la table asv, il est donc impossible pour moi de continuer plus loin.
 
 # Partie bétâ-diversité
 
@@ -472,444 +478,15 @@ library(ggplot2)
 library(dplyr)
 ```
 
-Charger les données. (((((())))))
-```{r}
+Charger les données. 
+```{r, eval=FALSE}
 physeq <- readRDS(here::here("outputs",
                              "article",
                              "asv_table",
-                             "phyloseq_object_alpha_beta_div.rds"))
+                             ""))
 ```
 
 
-## Partie 2
-
-
-Normalisation des tables de données
-Ici on le fait par raréfaction : nous sous-échantillons les reads de chaque échantillon sans remise à une "profondeur constante"
-```{r}
-rowSums(physeq@otu_table@.Data)
-```
-
-On va faire des tableaux de ces résultats et regarder les rangs d'abondance de nos reads.
-```{r}
-readsumsdf <- data.frame(nreads = sort(taxa_sums(physeq), decreasing = TRUE),
-                        sorted = 1:ntaxa(physeq),
-                        type = "OTUs")
-
-tmp <- data.frame(nreads = sort(sample_sums(physeq), decreasing = TRUE), 
-                  sorted = 1:nsamples(physeq),
-                  type = "Samples")
-
-readsumsdf <- rbind(readsumsdf, tmp)
-
-head(readsumsdf)
-```
-
-```{r}
-ggplot(readsumsdf, aes(x = sorted, y = nreads)) +
-  geom_bar(stat = "identity") +
-  ggtitle("Total number of reads") +
-  scale_y_log10() +
-  facet_wrap(~type, nrow = 1, scales = "free")
-```
-
-
-On veut s'assurer que l'effort des échantillonnages est le même pour tous les échantillons.
-On défini la graine pour un échantillonnage aléatoire qui permet la reproductibilité.
-```{r}
-set.seed(10000)
-
-min(rowSums(physeq@otu_table@.Data))
-```
-
-Le miminum de reads dans un échantillon est 837 ((((()))))
-Faisons l'échantillonnage aléatoire pour 800 reads par échantillon pour appliquer le processus à chaque échantillonnage pour avoir le même nombre partout (mettre tout le monde au même niveau, le plus bas)
-```{r}
-physeq_rar <- rarefy_even_depth(physeq, sample.size = 800)
-rowSums(physeq_rar@otu_table@.Data)
-```
-
-
-```{r}
-physeq
-```
-
-```{r}
-physeq_rar
-```
-
-
-Faisons la transformation CLR (centered log-ratio)
-```{r}
-tmp <- zCompositions::cmultRepl(physeq@otu_table,
-                                method = "CZM",
-                                label = 0,
-                                z.warning = 1)
-
-physeq_clr_asv <- apply(tmp, 1, function(x) log(x) - mean(log(x)))
-```
-
-Tous le monde à la même enseigne : on centre et on passe en log.
-```{r}
-physeq_clr <- physeq
-otu_table(physeq_clr) <- otu_table(t(physeq_clr_asv),
-                                   taxa_are_rows = FALSE)
-data.frame(physeq_clr@otu_table@.Data[1:5, 1:10])
-```
-
-
-## Partie 3
-
-La première étape dans beaucoup de projets de microbiome, c'est de visualiser l'abondance relative des organismes à un rang taxonomique spécifique. La representation en arbre et les plots compilés sont deux façons de le faire
-```{r}
-physeq_phylum <- physeq_rar %>%
-  tax_glom(taxrank = "Family") %>%                     # agglomerate at the Family level
-  transform_sample_counts(function(x) {x/sum(x)} ) %>% # Transform to rel. abundance
-  psmelt() %>%                                         # Melt to long format
-  filter(Abundance > 0.02) %>%                         # Filter out low abundance taxa
-  arrange(Family)                                      # Sort data frame alphabetically by phylum
-
-head(physeq_phylum)
-```
-
-
-Regarder la composition de la méta-communauté avec un arbre permet de détecter si certains taxa ne devraient pas être présents (contaminants) et d'observer si le taxa dominant correspond bien à l'habitat étudié.
-```{r}
-#pdf(file="treemap.pdf", wi = 7, he = 7)
-
-treemap::treemap(physeq_phylum, index=c("Class", "Family"), vSize="Abundance", type="index",
-        fontsize.labels=c(15,12),                
-        fontcolor.labels=c("white","black"),# Color of labels
-        fontface.labels=c(2,1),                  
-        align.labels=list(
-          c("center", "center"), 
-          c("left", "bottom")), # Where to place labels in the rectangle?
-        overlap.labels=0.5,
-        inflate.labels=F, # If true, labels are bigger when rectangle is bigger.
-        border.col=c("black","white"),#Color of the boders separating the taxonomic levels
-        border.lwds=c(4,2),
-        #palette = "Set3", # Select your color palette from the RColorBrewer presets or make your own.
-        fontsize.title=12
-)
-```
-
-Utilisation du package treemapify.
-```{r}
-tmp <- transform_sample_counts(physeq,function(x) {x/sum(x)} ) %>%
-  psmelt() %>%
-  group_by(Family, Class) %>%
-  summarise(abundance = sum(Abundance)) %>%
-  na.omit()
-
-ggplot(tmp,aes(area=abundance,label=Family,fill=Class,subgroup=Class))+
-  treemapify::geom_treemap()+
-  treemapify::geom_treemap_subgroup_border() +
-  treemapify::geom_treemap_subgroup_text(place = "centre",
-                                         grow = T,
-                                         alpha = 0.5,
-                                         colour = "black",
-                                         fontface = "italic",
-                                         min.size = 0) +
-  treemapify::geom_treemap_text(colour = "white",
-                                place = "topleft",
-                                reflow = TRUE)+
-  theme(legend.position="none")
-```
-
-
-```{r}
-ggsave(here::here(output_beta,"treemap_treemapify.pdf"))
-```
-
-
-```{r}
-ggplot(physeq_phylum, aes(x = Sample, y = Abundance, fill = Family)) + 
-  geom_bar(stat = "identity") +
-  # facet_wrap(~Treatment, nrow=1, scales = "free_x") +
-  ylab("Relative Abundance (Family > 2%)") +
-  scale_y_continuous(expand = c(0,0)) + #remove the space below the 0 of the y axis in the graph
-  ggtitle("Community composition") +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 45, size = 10,
-                                   hjust = 0.5, vjust = 0.8),
-        axis.ticks.x = element_blank(),
-        panel.background = element_blank(), 
-        panel.grid.major = element_blank(),  #remove major-grid labels
-        panel.grid.minor = element_blank())  #remove minor-grid labels
-```
-
-
-Le blanc ce sont les inconnus, on n'a pas réussi à les attribuer à une famille.
-
-```{r}
-ggsave(here::here(output_beta, "asv_composition.pdf"))
-```
-
-## Partie 4
-
-Indice de jaccard binaire : présence / absence
-```{r}
-physeq_rar_jaccard <- phyloseq::distance(physeq_rar,
-                                         method = "jaccard",
-                                         binary = TRUE)
-
-# trick to avoid negative egein values in PCoA
-# it recreates what ade4::dist.binary() does
-physeq_rar_jaccard <- sqrt(physeq_rar_jaccard)
-```
-
-Le package GUniFrac nécessite une arborescence enracinée comme données d'entrée. 
-Pour vérifier si l'arbre est enraciné :
-```{r}
-ape::is.rooted(physeq_rar@phy_tree)
-```
-
-### Calculer les distances.
-
-#### Phylogénétique compositionnelle (Unifrac non pondéré)
-```{r}
-unifracs <- GUniFrac::GUniFrac(physeq_rar@otu_table@.Data, physeq_rar@phy_tree, alpha=c(0, 0.5, 1))$unifracs
-```
-
-L'objet unifracs est une liste qui contient 5 matrices de distance qui correspondent à : weighted UniFrac (d_1), the unweighted UniFrac (d_UW), Variance adjusted UniFrac (d_VAW), GUniFrac with alpha = 0, GUniFrac with alpha = 0.5
-```{r}
-physeq_rar_du <- unifracs[, , "d_UW"]   # Unweighted UniFrac
-```
-
-
-#### Taxonomique structurelle (Bray-Curtis)
-
-```{r}
-# physeq_rar_bray <- vegan::vegdist(physeq_rar@otu_table@.Data, method = "bray")
-
-tmp <- transform_sample_counts(physeq,function(x) {x/sum(x)} )
-physeq_rar_bray <- phyloseq::distance(tmp, method = "bray")
-```
-
-
-#### Phylogénétique structurelle (Unifrac pondéré)
-
-```{r}
-physeq_rar_dw <- unifracs[, , "d_1"]   # Weighted UniFrac
-```
-
-
-### Visualisation
-
-```{r}
-dist_methods <- unlist(distanceMethodList)
-data.frame(position = seq_along(dist_methods),
-           dist_methods)
-```
-
-```{r}
-#Select the distances of interest
-dist_methods <- dist_methods[c(1, 2, 10, 8)]
-dist_methods
-```
-
-```{r}
-#Loop through each distance method, save each plot to a list, called plist.
-plist <- vector("list")
-
-for(i in dist_methods){
-  # Calculate distance matrix
-  iDist <- phyloseq::distance(physeq_rar, method = i)
-  # Calculate PCoA ordination
-  iMDS <- ordinate(physeq_rar, "MDS", distance = iDist)
-  ## Make plot. Don't carry over previous plot (if error, p will be blank)
-  p <- NULL
-  # Create plot, store as temp variable, p
-  p <- plot_ordination(physeq_rar, iMDS, color= "Geo")
-  # Add title to each plot
-  p <- p + ggtitle(paste("MDS using distance method ", i, sep=""))
-  # Save the graphic to list
-  plist[[i]] = p 
-}
-```
-
-Combiner les résultats : 
-```{r}
-df <- plyr::ldply(plist, function(x) x$data)
-head(df)
-```
-
-Faire des ordinations avec différents indices.
-```{r}
-names(df)[1] <- "distance"
-
-ggplot(df, aes(Axis.1, Axis.2, color = Geo)) +
-  geom_point(size=3, alpha=0.5) +
-  theme_bw() +
-  facet_wrap(~distance, scales="free") +
-  ggtitle("PCoA (MDS) on various distance metrics")
-```
-
-
-## Partie 5 : Clustering hiérarchique
-
-### Classification ascendante hiérarchique (HAC)
-
-Examiner les clusters d'échantillons sur des mesures de dis(similarités)
-Les données de microbiome sont compositionelles, on va faire une classification ascendante hierarchique (HAC) des échantillons basée sur la distance Aitchison.
-```{r}
-#distance matrix calculation
-physeq_clr_dist <- phyloseq::distance(physeq_clr, method = "euclidean")
-```
-
-Regardons les différence de clusters obtenus avec 4 critères d'aggrégation
-
-```{r}
-#Simple aggregation criterion
-spe_single <- hclust(physeq_clr_dist, method = "single")
-
-#Complete aggregation criterion
-spe_complete <- hclust(physeq_clr_dist, method = "complete")
-
-#Unweighted pair group method with arithmetic mean
-spe_upgma <- hclust(physeq_clr_dist, method = "average")
-
-#Ward criterion
-spe_ward <- hclust(physeq_clr_dist, method = "ward.D")
-
-par(mfrow = c(2, 2))
-plot(spe_single, main = "single")
-plot(spe_complete, main = "complete")
-plot(spe_upgma, main = "UPGMA")
-plot(spe_ward, main = "ward")
-
-#ce n'est pas un test stat, c'est une procédure heuristique
-```
-
-
-### Corrélation cophénétique
-
-Composons la matrice cophénétique et de corrélation de 4 résultats de clustering présents au-dessus.
-```{r}
-#Cophenetic correlation
-spe_single_coph <- cophenetic(spe_single)
-cor(physeq_clr_dist, spe_single_coph)
-spe_complete_coph <- cophenetic(spe_complete)
-cor(physeq_clr_dist, spe_complete_coph)
-spe_upgma_coph <- cophenetic(spe_upgma)
-cor(physeq_clr_dist, spe_upgma_coph)
-spe_ward_coph <- cophenetic(spe_ward)
-cor(physeq_clr_dist, spe_ward_coph)
-```
-
-
-Pour illustrer la relation entre la matrice de distance et un ensembles de matrices cophénétique obtenues de différentes façons, on peut réaliser un diagramme Shepard-like en traçant les distances originelles par rapport au distances cophénétique.
-```{r}
-plot_coph_cor <- function(cophenetic_distance, hclust_type){
-
-  # first calculate the correlation between
-  # the cophenetic distance and the observed distance
-  cor_res <- round(cor(physeq_clr_dist, cophenetic_distance),3)
-
-  # generate a scatter plot to visualise
-  # the relationship
-  plot(x = physeq_clr_dist,
-     y = cophenetic_distance,
-     xlab = "Aitchison distance",
-     ylab = "Cophenetic distance",
-     xlim = c(10, 35), ylim = c(10, 35),
-     main = c(hclust_type, paste("Cophenetic correlation ", cor_res)))
-  abline(0, 1)
-}
-
-par(mfrow=c(2,2))
-
-plot_coph_cor(cophenetic_distance = spe_complete_coph,
-              hclust_type = "Single linkage")
-
-plot_coph_cor(cophenetic_distance = spe_complete_coph,
-              hclust_type = "Complete linkage")
-
-plot_coph_cor(cophenetic_distance = spe_upgma_coph,
-              hclust_type = "Average linkage")
-
-plot_coph_cor(cophenetic_distance = spe_ward_coph,
-              hclust_type = "Ward linkage")
-```
-
-
-### Recherche des clusters interprétables
-
-Cela signifie qu'il faut décider à quel niveau faut-il couper le dendrogramme.
-```{r}
-#Fusion level plot
-par(mfrow = c(1, 1))
-
-plot(x = spe_upgma$height,
-     y = phyloseq::nsamples(physeq_clr):2,
-     type = "S",
-     main = "Fusion levels - Aitchison - Average",
-     ylab = "k (number of cluster)",
-     xlab = "h (node height)")
-
-text(x = spe_upgma$height,
-     y = phyloseq::nsamples(physeq_clr):2,
-     labels = phyloseq::nsamples(physeq_clr):2,
-     col = "red",
-     cex = 0.8)
-```
-
-
-Utilisation du package NbClust pour déterminer le nombre exact de clusters dans le jeu de données.
-
-```{r,eval=FALSE}
-#install.packages("NbClust", lib = ".")
-#library("NbClust", lib.loc = ".")
-```
-
-```{r}
-nclust <- nb_clust_all(data = t(physeq_clr_asv), seed = 1000)
-```
-
-NbClust confirme qu'il y a bien ((((((())))))) clusters. Retour au dendogramme pour le couper au bon endroit et pouvoir comparer les ((((((((()))) clusters.
-```{r}
-k <- 2 # Number of groups given by the fusion level plot
-
-#Cut the dendrogram
-spe_upgma_clust <- cutree(tree = spe_upgma, k = k)
-table(spe_upgma_clust)
-```
-
-```{r}
-spe_upgma_clust2 <- data.frame(UPGMA_clusters = spe_upgma_clust)
-```
-
-```{r}
-# Plot dendrogram with group labels
-plot(spe_upgma,
-     hang = -1,
-     ylab = "Height",
-     main="Aitchison distance - UPGMA")
-
-rect.hclust(spe_upgma,
-            k = k,
-            border = 2:6,
-            cluster = spe_upgma_clust)
-
-legend("topright",
-       paste("Cluster", 1:k),
-       pch = 22,
-       col = 2:(k + 1),
-       bty = "n")
-```
-
-
-Un DI élevé signifie un meilleur regroupement puisque les observations de chaque cluster sont plus rapprochées, tandis que les clusters eux-mêmes sont plus éloignés les uns des autres. 
-```{r}
-cs <- fpc::cluster.stats(d = physeq_clr_dist,
-                         clustering = spe_upgma_clust)
-
-cs$dunn
-```
-
-
-## Partie 6 
 
 
 
